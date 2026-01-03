@@ -1,0 +1,807 @@
+import calendar
+from datetime import date
+import numpy as np
+import pandas as pd
+import streamlit as st
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+import gspread
+from google.oauth2.service_account import Credentials
+
+
+# =========================================================
+# Page
+# =========================================================
+st.set_page_config(
+    page_title="Gym Kitty",
+    page_icon="💪",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# =========================================================
+# A *real* light, modern UI (Inter + subtle gradients + cards)
+# =========================================================
+CSS = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+
+:root{
+  --bg: #F6F8FC;
+  --text: #0B1220;
+  --muted: rgba(11,18,32,0.60);
+  --border: rgba(11,18,32,0.10);
+  --card: rgba(255,255,255,0.82);
+  --card2: rgba(255,255,255,0.94);
+  --shadow: 0 14px 38px rgba(11,18,32,0.09);
+  --shadow2: 0 7px 18px rgba(11,18,32,0.08);
+  --r: 18px;
+}
+
+html, body, [class*="css"]{
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif !important;
+  color: var(--text);
+}
+
+.stApp{
+  background:
+    radial-gradient(1200px 600px at 8% -10%, rgba(99,102,241,0.18), transparent 55%),
+    radial-gradient(1200px 600px at 92% -10%, rgba(16,185,129,0.16), transparent 55%),
+    radial-gradient(900px 500px at 50% 110%, rgba(59,130,246,0.10), transparent 55%),
+    var(--bg);
+}
+
+.block-container{
+  padding-top: 1.05rem;
+  padding-bottom: 2.0rem;
+  max-width: 1380px;
+}
+
+h1,h2,h3{ letter-spacing:-0.025em; }
+.small-muted{ color: var(--muted); font-size: 0.95rem; }
+
+.card{
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  box-shadow: var(--shadow2);
+  padding: 18px 18px;
+}
+.cardSolid{
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+  padding: 18px 18px;
+}
+.kpiRow{ display:flex; gap:12px; flex-wrap:wrap; }
+.kpi{
+  flex:1;
+  min-width: 190px;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow2);
+  padding: 14px 14px;
+}
+.kpi .label{ font-size: 0.86rem; color: var(--muted); }
+.kpi .value{ font-size: 1.7rem; font-weight: 800; margin-top: 4px; line-height: 1.1; }
+
+.badge{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding: 7px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.72);
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.dot{
+  width: 8px; height: 8px;
+  border-radius: 999px;
+  background: rgba(16,185,129,0.9);
+}
+
+hr{
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 16px 0;
+}
+
+/* Sidebar */
+section[data-testid="stSidebar"]{
+  background: rgba(255,255,255,0.58);
+  border-right: 1px solid var(--border);
+  backdrop-filter: blur(10px);
+}
+section[data-testid="stSidebar"] .block-container{ padding-top: 1.0rem; }
+
+/* Dataframe polish */
+div[data-testid="stDataFrame"]{
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow2);
+}
+
+/* Buttons */
+.stButton > button{
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.92);
+  box-shadow: var(--shadow2);
+  font-weight: 600;
+}
+.stButton > button:hover{ transform: translateY(-1px); }
+
+/* Inputs */
+div[data-baseweb="select"] > div,
+div[data-baseweb="input"] > div{
+  border-radius: 12px !important;
+}
+</style>
+"""
+st.markdown(CSS, unsafe_allow_html=True)
+
+# =========================================================
+# Plot styling (light, crisp)
+# =========================================================
+def style_plots():
+    sns.set_theme(style="whitegrid", font="Inter")
+    plt.rcParams["figure.dpi"] = 150
+    plt.rcParams["font.family"] = "Inter"
+
+def set_title_labels(ax, title, xlabel="", ylabel=""):
+    ax.set_title(title, fontsize=12, fontweight="bold")
+    ax.set_xlabel(xlabel, fontsize=9, fontweight="bold")
+    ax.set_ylabel(ylabel, fontsize=9, fontweight="bold")
+
+
+# =========================================================
+# Google Sheets auth (same as notebook)
+# =========================================================
+SPREADSHEET_ID = "17RADj_LH-Lj_lB8QFZyxjv8iKFerNZfNT-7wmtPNuzk"
+WORKSHEET_NAME = "Form Responses"
+SERVICE_ACCOUNT_JSON_PATH = "secrets/service_account.json"
+
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets.readonly",
+    "https://www.googleapis.com/auth/drive.readonly",
+]
+
+
+@st.cache_data(ttl=45, show_spinner=False)
+def read_google_sheet_as_df(spreadsheet_id: str, worksheet_name: str, json_path: str) -> pd.DataFrame:
+    creds = Credentials.from_service_account_file(json_path, scopes=SCOPES)
+    gc = gspread.authorize(creds)
+
+    sh = gc.open_by_key(spreadsheet_id)
+    ws = sh.worksheet(worksheet_name)
+
+    values = ws.get_all_values()
+    if not values:
+        return pd.DataFrame()
+
+    headers = values[0]
+    rows = values[1:]
+    df = pd.DataFrame(rows, columns=headers)
+    df = df.replace("", pd.NA).dropna(how="all")
+    return df
+
+
+# =========================================================
+# Cleaning (mirrors your notebook defaults)
+# =========================================================
+def normalize_bool(x) -> bool:
+    if pd.isna(x):
+        return False
+    s = str(x).strip().lower()
+    return s in {"yes", "true", "1", "y", "t"}
+
+
+def clean(
+    df: pd.DataFrame,
+    *,
+    col_timestamp: str = "Timestamp",
+    col_name: str = "You are?",
+    col_wkdate: str = "Workout date",
+    col_250: str = "Burnt >= 250 calories?",
+    dedupe: bool = True,
+) -> pd.DataFrame:
+    df = df.copy()
+
+    expected = {col_timestamp, col_name, col_wkdate, col_250}
+    missing = expected - set(df.columns)
+    if missing:
+        raise ValueError(
+            f"Missing columns: {missing}. Found columns: {list(df.columns)}"
+        )
+
+    df = df.rename(
+        columns={
+            col_timestamp: "timestamp",
+            col_name: "name_raw",
+            col_wkdate: "workout_date_raw",
+            col_250: "burnt_250_raw",
+        }
+    )
+
+    df["name"] = (
+        df["name_raw"].astype(str).str.strip().str.replace(r"\s+", " ", regex=True)
+    )
+
+    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+    df["timestamp_date"] = df["timestamp"].dt.date
+
+    df["workout_date"] = pd.to_datetime(df["workout_date_raw"], errors="coerce").dt.date
+
+    df["burnt_250"] = df["burnt_250_raw"].apply(normalize_bool)
+
+    if dedupe:
+        # Dedupe by (name, workout_date) keeping latest timestamp
+        df = (
+            df.sort_values("timestamp", ascending=True)
+            .drop_duplicates(subset=["name", "workout_date"], keep="last")
+            .reset_index(drop=True)
+        )
+
+    df["any_workout"] = df["workout_date"].notna()
+
+    df["workout_dt"] = pd.to_datetime(df["workout_date"], errors="coerce")
+    df["month"] = df["workout_dt"].dt.to_period("M").astype(str)
+    df["dow"] = df["workout_dt"].dt.day_name()
+
+    # Delay between workout date and log timestamp
+    df["log_delay_days"] = (
+        pd.to_datetime(df["timestamp_date"], errors="coerce")
+        - pd.to_datetime(df["workout_date"], errors="coerce")
+    ).dt.days
+
+    df["dom"] = df["workout_dt"].dt.day
+    df["delay_flag"] = np.where(
+        df["log_delay_days"].isna(),
+        pd.NA,
+        np.where(df["log_delay_days"] < 0, "negative_delay", ""),
+    )
+
+    return df
+
+
+# =========================================================
+# Metrics
+# =========================================================
+def current_month_str() -> str:
+    t = date.today()
+    return f"{t.year:04d}-{t.month:02d}"
+
+def month_bounds(month_str: str):
+    y, m = map(int, month_str.split("-"))
+    last_day = calendar.monthrange(y, m)[1]
+    return date(y, m, 1), date(y, m, last_day)
+
+def month_leaderboard(df: pd.DataFrame, month_str: str, cutoff: int) -> pd.DataFrame:
+    d = df[(df["month"] == month_str) & (df["workout_date"].notna())].copy()
+
+    any_days = (
+        d.groupby("name")["workout_date"]
+        .nunique()
+        .rename("workout_days")
+        .reset_index()
+    )
+    qual_days = (
+        d[d["burnt_250"]]
+        .groupby("name")["workout_date"]
+        .nunique()
+        .rename("qualifying_days")
+        .reset_index()
+    )
+
+    out = any_days.merge(qual_days, on="name", how="left")
+    out["qualifying_days"] = out["qualifying_days"].fillna(0).astype(int)
+    out["workout_days"] = out["workout_days"].fillna(0).astype(int)
+    out["workouts_left"] = (cutoff - out["qualifying_days"]).clip(lower=0).astype(int)
+    out["is_winner"] = out["qualifying_days"] >= cutoff
+    out["progress"] = (out["qualifying_days"] / max(cutoff, 1)).clip(0, 1)
+
+    # Rank: winners first, then highest qualifying days
+    out = out.sort_values(
+        ["is_winner", "qualifying_days", "workout_days", "name"],
+        ascending=[False, False, False, True],
+    ).reset_index(drop=True)
+
+    return out
+
+def longest_streak(dates: list[date]) -> int:
+    if not dates:
+        return 0
+    ds = sorted(set(dates))
+    best = cur = 1
+    for i in range(1, len(ds)):
+        if (ds[i] - ds[i - 1]).days == 1:
+            cur += 1
+            best = max(best, cur)
+        else:
+            cur = 1
+    return best
+
+def fastest_winner_date(df_month: pd.DataFrame, name: str, cutoff: int):
+    d = df_month[(df_month["name"] == name) & (df_month["burnt_250"])].copy()
+    if d.empty:
+        return None
+    days = sorted(set(d["workout_date"].dropna().tolist()))
+    if len(days) < cutoff:
+        return None
+    return days[cutoff - 1]
+
+def lazy_logger_score(df_month: pd.DataFrame):
+    d = df_month.dropna(subset=["workout_date", "timestamp"]).copy()
+    if d.empty:
+        return None
+    agg = (
+        d.groupby("name")["log_delay_days"]
+        .mean()
+        .rename("avg_log_delay_days")
+        .reset_index()
+        .sort_values("avg_log_delay_days", ascending=False)
+    )
+    return agg
+
+def frontload_vs_cram(df_month: pd.DataFrame):
+    if df_month.empty:
+        return pd.DataFrame()
+    start, end = month_bounds(df_month["month"].iloc[0])
+    mid = start + (end - start) / 2
+    mid = date(mid.year, mid.month, int(mid.day))
+
+    d = df_month[df_month["burnt_250"]].copy()
+
+    def split_counts(x):
+        days = sorted(set(x["workout_date"].dropna().tolist()))
+        first = sum(1 for dd in days if dd <= mid)
+        second = sum(1 for dd in days if dd > mid)
+        total = first + second
+        if total == 0:
+            style = "No qualifying"
+        elif first >= second + 3:
+            style = "Front-loader"
+        elif second >= first + 3:
+            style = "Crammer"
+        else:
+            style = "Balanced"
+        return pd.Series({"first_half": first, "second_half": second, "style": style})
+
+    out = d.groupby("name").apply(split_counts).reset_index()
+    return out.sort_values(["style", "first_half"], ascending=[True, False])
+
+
+# =========================================================
+# Header
+# =========================================================
+st.markdown(
+    f"""
+<div class="cardSolid">
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:18px;">
+    <div>
+      <div style="font-size:1.75rem; font-weight:800; line-height:1.1;">Gym Kitty</div>
+      <div class="small-muted">Live leaderboard • scorecards • personalization • trends</div>
+    </div>
+    <div class="badge"><span class="dot"></span> Live from Google Sheets</div>
+  </div>
+</div>
+""",
+    unsafe_allow_html=True,
+)
+
+st.write("")
+
+
+# =========================================================
+# Sidebar navigation
+# =========================================================
+with st.sidebar:
+    st.markdown("## 💪 Gym Kitty")
+    st.markdown("<div class='small-muted'>Fast, clean, and actually readable.</div>", unsafe_allow_html=True)
+    st.markdown("---")
+
+    tab = st.radio(
+        "Tabs",
+        ["🏆 Leaderboard", "🧾 Scorecard", "✨ Personalization", "📈 Month-over-month"],
+        label_visibility="collapsed",
+    )
+
+    st.markdown("---")
+    st.markdown("### Settings")
+    WINNER_CUTOFF = st.number_input("Winner cutoff (qualifying days)", 1, 31, 16, 1)
+    dedupe = st.toggle("De-duplicate (keep latest per day)", value=True)
+    show_raw = st.toggle("Show debug (raw + columns)", value=False)
+
+    st.markdown("---")
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("↻ Refresh", use_container_width=True):
+            st.cache_data.clear()
+    with c2:
+        st.caption("Live cache: 45s")
+
+
+# =========================================================
+# Load and clean
+# =========================================================
+try:
+    raw = read_google_sheet_as_df(SPREADSHEET_ID, WORKSHEET_NAME, SERVICE_ACCOUNT_JSON_PATH)
+except Exception as e:
+    st.error("Could not read Google Sheet. Check: service_account.json path + share the sheet with the service account email.")
+    st.exception(e)
+    st.stop()
+
+try:
+    df = clean(raw, dedupe=dedupe)
+except Exception as e:
+    st.error("Data cleaning failed (likely header mismatch).")
+    st.exception(e)
+    st.stop()
+
+if show_raw:
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.subheader("Debug")
+    st.write("Raw columns:", list(raw.columns))
+    st.write("Clean columns:", list(df.columns))
+    st.dataframe(raw.head(20), use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+months = sorted([m for m in df["month"].dropna().unique().tolist()])
+if not months:
+    st.warning("No workouts found yet.")
+    st.stop()
+
+cur = current_month_str()
+default_idx = months.index(cur) if cur in months else (len(months) - 1)
+
+top = st.columns([1.15, 1.0, 1.0, 0.85])
+with top[0]:
+    month_selected = st.selectbox("Month", months, index=default_idx)
+with top[1]:
+    st.markdown(f"<span class='badge'>Sheet tab: {WORKSHEET_NAME}</span>", unsafe_allow_html=True)
+with top[2]:
+    st.markdown(f"<span class='badge'>Sheet: …{SPREADSHEET_ID[-8:]}</span>", unsafe_allow_html=True)
+with top[3]:
+    st.markdown(f"<span class='badge'>Cutoff: {WINNER_CUTOFF} days</span>", unsafe_allow_html=True)
+
+lb = month_leaderboard(df, month_selected, WINNER_CUTOFF)
+df_month = df[(df["month"] == month_selected) & (df["workout_date"].notna())].copy()
+
+
+# =========================================================
+# Leaderboard
+# =========================================================
+if tab.startswith("🏆"):
+    left, right = st.columns([1.85, 1.0], gap="large")
+
+    with left:
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        st.subheader("Live Leaderboard")
+
+        winners = lb[lb["is_winner"]]
+        total_people = int(lb["name"].nunique())
+        winner_count = int(winners["name"].nunique())
+        total_qual = int(lb["qualifying_days"].sum())
+
+        st.markdown(
+            f"""
+<div class="kpiRow">
+  <div class="kpi"><div class="label">Participants</div><div class="value">{total_people}</div></div>
+  <div class="kpi"><div class="label">Winners</div><div class="value">{winner_count}</div></div>
+  <div class="kpi"><div class="label">Total qualifying days</div><div class="value">{total_qual}</div></div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+        st.write("")
+
+        show = lb.copy()
+        show.insert(0, "Status", np.where(show["is_winner"], "🏆", ""))
+        show["Progress"] = show["progress"]
+        show = show.rename(
+            columns={
+                "name": "Name",
+                "qualifying_days": "Qualifying Days",
+                "workout_days": "Workout Days",
+                "workouts_left": "Workouts Left",
+            }
+        )
+
+        st.dataframe(
+            show[["Status", "Name", "Qualifying Days", "Workouts Left", "Workout Days", "Progress"]],
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Progress": st.column_config.ProgressColumn(
+                    "Progress",
+                    help="Qualifying progress toward cutoff",
+                    min_value=0.0,
+                    max_value=1.0,
+                    format="%.0f%%",
+                ),
+                "Workouts Left": st.column_config.NumberColumn(
+                    "Workouts Left",
+                    help="Remaining qualifying days needed to win",
+                    format="%d",
+                ),
+            },
+        )
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with right:
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        st.subheader("Workouts left (by person)")
+
+        people = sorted(lb["name"].dropna().unique().tolist())
+        who = st.selectbox("Select person", people)
+
+        row = lb[lb["name"] == who].iloc[0]
+        remaining = int(row["workouts_left"])
+        qdays = int(row["qualifying_days"])
+        wdays = int(row["workout_days"])
+
+        st.markdown("<div class='cardSolid'>", unsafe_allow_html=True)
+        st.markdown(f"### {who}")
+        st.markdown(f"<div class='small-muted'>This month</div>", unsafe_allow_html=True)
+        st.markdown(f"- Qualifying: **{qdays} / {WINNER_CUTOFF}**")
+        st.markdown(f"- Workout days (any): **{wdays}**")
+        st.markdown(f"#### Remaining: **{remaining}**")
+        if remaining == 0:
+            st.success("Winner locked 🔥")
+        else:
+            st.info("Keep going 💪")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        style_plots()
+        q = df_month[(df_month["name"] == who) & (df_month["burnt_250"])].copy()
+        if not q.empty:
+            q["dom"] = pd.to_datetime(q["workout_date"]).dt.day
+            g = q.groupby("dom")["workout_date"].count().reset_index(name="count")
+
+            fig, ax = plt.subplots(figsize=(6.1, 2.35))
+            sns.barplot(data=g, x="dom", y="count", ax=ax)
+            set_title_labels(ax, "Qualifying workouts by day-of-month", "Day", "Count")
+            ax.tick_params(axis="x", labelrotation=0)
+            st.pyplot(fig, use_container_width=True)
+        else:
+            st.caption("No qualifying workouts yet for this person.")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+
+# =========================================================
+# Scorecard
+# =========================================================
+elif tab.startswith("🧾"):
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.subheader("Scorecard")
+    st.markdown("<div class='small-muted'>Longest streak • fastest winner • lazy logger • front-loading vs cramming • barely missed</div>", unsafe_allow_html=True)
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    # Longest qualifying streak
+    streak_rows = []
+    for name, g in df_month[df_month["burnt_250"]].groupby("name"):
+        streak_rows.append(
+            {"Name": name, "Longest Streak (days)": longest_streak(g["workout_date"].dropna().tolist())}
+        )
+    streak_df = pd.DataFrame(streak_rows).sort_values("Longest Streak (days)", ascending=False)
+
+    # Fastest winner
+    fw_rows = []
+    for name in df_month["name"].dropna().unique():
+        fw = fastest_winner_date(df_month, name, WINNER_CUTOFF)
+        if fw:
+            fw_rows.append({"Name": name, "Hit cutoff on": fw})
+    fw_df = pd.DataFrame(fw_rows).sort_values("Hit cutoff on") if fw_rows else pd.DataFrame(columns=["Name","Hit cutoff on"])
+
+    # Lazy logger
+    lazy_df = lazy_logger_score(df_month)
+
+    # Front-load vs cram
+    fl = frontload_vs_cram(df_month)
+
+    # Barely missed / consistent not qualifying
+    barely_missed = lb[(~lb["is_winner"]) & (lb["qualifying_days"].isin([WINNER_CUTOFF-2, WINNER_CUTOFF-1]))].copy()
+    barely_missed = barely_missed.rename(columns={"name":"Name","qualifying_days":"Qualifying Days","workouts_left":"Workouts Left","workout_days":"Workout Days"})
+    consistent_not_qual = lb[(~lb["is_winner"]) & (lb["workout_days"] >= WINNER_CUTOFF)].copy()
+    consistent_not_qual = consistent_not_qual.rename(columns={"name":"Name","qualifying_days":"Qualifying Days","workouts_left":"Workouts Left","workout_days":"Workout Days"})
+
+    a, b, c = st.columns(3, gap="large")
+
+    with a:
+        st.markdown("<div class='cardSolid'>", unsafe_allow_html=True)
+        st.markdown("### 🔥 Longest streak")
+        if not streak_df.empty:
+            top = streak_df.iloc[0]
+            st.markdown(f"**Leader:** {top['Name']} — **{int(top['Longest Streak (days)'])} days**")
+            st.dataframe(streak_df.head(12), hide_index=True, use_container_width=True)
+        else:
+            st.caption("No qualifying streaks yet.")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with b:
+        st.markdown("<div class='cardSolid'>", unsafe_allow_html=True)
+        st.markdown("### 🏁 Fastest winner")
+        if not fw_df.empty:
+            top = fw_df.iloc[0]
+            st.markdown(f"**Fastest:** {top['Name']} — cutoff on **{top['Hit cutoff on']}**")
+            st.dataframe(fw_df.head(12), hide_index=True, use_container_width=True)
+        else:
+            st.caption("No winners yet (or not enough qualifying days).")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with c:
+        st.markdown("<div class='cardSolid'>", unsafe_allow_html=True)
+        st.markdown("### 🐢 Lazy logger")
+        if lazy_df is not None and not lazy_df.empty:
+            lazy_show = lazy_df.rename(columns={"name":"Name"})
+            st.markdown(f"**Most delayed:** {lazy_show.iloc[0]['Name']} — avg **{lazy_show.iloc[0]['avg_log_delay_days']:.2f} days**")
+            st.dataframe(lazy_show.head(12), hide_index=True, use_container_width=True)
+        else:
+            st.caption("Need timestamps to score logging delay.")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+    left, right = st.columns([1.2, 1.0], gap="large")
+
+    with left:
+        st.markdown("<div class='cardSolid'>", unsafe_allow_html=True)
+        st.markdown("### 📦 Front-loading vs cramming")
+        if not fl.empty:
+            st.dataframe(fl.rename(columns={"name":"Name","first_half":"First half","second_half":"Second half","style":"Style"}), hide_index=True, use_container_width=True)
+            style_plots()
+            fig, ax = plt.subplots(figsize=(7.2, 3.0))
+            sns.countplot(data=fl, x="style", ax=ax)
+            set_title_labels(ax, "Distribution of styles", "Style", "People")
+            st.pyplot(fig, use_container_width=True)
+        else:
+            st.caption("Not enough data.")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with right:
+        st.markdown("<div class='cardSolid'>", unsafe_allow_html=True)
+        st.markdown("### 😮 Barely missed & consistent-but-not-qualifying")
+        st.caption("Barely missed = cutoff-2 or cutoff-1 qualifying days (not a winner).")
+        st.dataframe(barely_missed[["Name","Qualifying Days","Workouts Left","Workout Days"]], hide_index=True, use_container_width=True)
+        st.caption("Consistent but not qualifying = workout days ≥ cutoff but qualifying < cutoff.")
+        st.dataframe(consistent_not_qual[["Name","Qualifying Days","Workouts Left","Workout Days"]], hide_index=True, use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+# =========================================================
+# Personalization
+# =========================================================
+elif tab.startswith("✨"):
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.subheader("Personalization")
+    st.markdown("<div class='small-muted'>Day-of-week trends (overall vs selected person)</div>", unsafe_allow_html=True)
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    people = sorted(df_month["name"].dropna().unique().tolist())
+    who = st.selectbox("Person", people)
+
+    weekday_order = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
+
+    style_plots()
+    overall = (
+        df_month[df_month["any_workout"]]
+        .groupby("dow")["workout_date"]
+        .nunique()
+        .reindex(weekday_order)
+        .reset_index(name="Unique workout days")
+    )
+
+    person = (
+        df_month[(df_month["name"] == who) & (df_month["any_workout"])]
+        .groupby("dow")["workout_date"]
+        .nunique()
+        .reindex(weekday_order)
+        .reset_index(name="Unique workout days")
+    )
+
+    left, right = st.columns(2, gap="large")
+    with left:
+        st.markdown("<div class='cardSolid'>", unsafe_allow_html=True)
+        fig, ax = plt.subplots(figsize=(6.9, 3.0))
+        sns.barplot(data=overall, x="dow", y="Unique workout days", ax=ax)
+        set_title_labels(ax, "Overall workouts by weekday", "Weekday", "Unique days")
+        ax.tick_params(axis="x", labelrotation=18)
+        st.pyplot(fig, use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with right:
+        st.markdown("<div class='cardSolid'>", unsafe_allow_html=True)
+        fig, ax = plt.subplots(figsize=(6.9, 3.0))
+        sns.barplot(data=person, x="dow", y="Unique workout days", ax=ax)
+        set_title_labels(ax, f"{who}: workouts by weekday", "Weekday", "Unique days")
+        ax.tick_params(axis="x", labelrotation=18)
+        st.pyplot(fig, use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+# =========================================================
+# Month-over-month
+# =========================================================
+else:
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.subheader("Month-over-month Trends")
+    st.markdown("<div class='small-muted'>Participation, winners, and qualifying intensity over time</div>", unsafe_allow_html=True)
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    participants = (
+        df[df["any_workout"]].groupby("month")["name"].nunique().reset_index(name="Participants")
+    )
+
+    # Unique workout days across the whole group per month
+    total_workouts = (
+        df[df["any_workout"]].groupby("month")["workout_date"].nunique().reset_index(name="Total unique workout days")
+    )
+
+    qual = (
+        df[df["burnt_250"]]
+        .groupby(["month", "name"])["workout_date"]
+        .nunique()
+        .reset_index(name="qualifying_days")
+    )
+    avg_qual = (
+        qual.groupby("month")["qualifying_days"].mean().reset_index(name="Avg qualifying days / person")
+    )
+
+    winners = qual.copy()
+    winners["is_winner"] = winners["qualifying_days"] >= WINNER_CUTOFF
+    winner_count = (
+        winners[winners["is_winner"]].groupby("month")["name"].nunique().reset_index(name="Winners")
+    )
+
+    mom = (
+        participants.merge(total_workouts, on="month", how="left")
+        .merge(avg_qual, on="month", how="left")
+        .merge(winner_count, on="month", how="left")
+        .fillna({"Winners": 0, "Avg qualifying days / person": 0})
+        .sort_values("month")
+        .reset_index(drop=True)
+    )
+
+    st.dataframe(mom, hide_index=True, use_container_width=True)
+
+    style_plots()
+    c1, c2 = st.columns(2, gap="large")
+
+    with c1:
+        st.markdown("<div class='cardSolid'>", unsafe_allow_html=True)
+        fig, ax = plt.subplots(figsize=(7.2, 3.0))
+        sns.lineplot(data=mom, x="month", y="Participants", marker="o", ax=ax)
+        set_title_labels(ax, "Participants per month", "Month", "Participants")
+        ax.tick_params(axis="x", labelrotation=18)
+        st.pyplot(fig, use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown("<div class='cardSolid'>", unsafe_allow_html=True)
+        fig, ax = plt.subplots(figsize=(7.2, 3.0))
+        sns.lineplot(data=mom, x="month", y="Winners", marker="o", ax=ax)
+        set_title_labels(ax, "Winners per month", "Month", "Winners")
+        ax.tick_params(axis="x", labelrotation=18)
+        st.pyplot(fig, use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with c2:
+        st.markdown("<div class='cardSolid'>", unsafe_allow_html=True)
+        fig, ax = plt.subplots(figsize=(7.2, 3.0))
+        sns.lineplot(data=mom, x="month", y="Avg qualifying days / person", marker="o", ax=ax)
+        set_title_labels(ax, "Avg qualifying intensity", "Month", "Avg qualifying days")
+        ax.tick_params(axis="x", labelrotation=18)
+        st.pyplot(fig, use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
