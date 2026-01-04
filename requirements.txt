@@ -5,3 +5,6 @@ streamlit
 python-dateutil
 gspread
 google-auth
+seaborn
+google-auth-oauthlib
+google-auth-httplib2
