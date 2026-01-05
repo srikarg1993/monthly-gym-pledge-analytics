@@ -231,7 +231,8 @@ section[data-testid="stSidebar"] div.stButton > button:focus {
   border-color: rgba(99,102,241,0.6);
 }
 
-div[data-testid="stVerticalBlock"] > div.stContainer {
+div[class^="st-key-"],
+div[class*=" st-key-"] {
   background: rgba(28,36,60,0.96);
   border-radius: 18px;
   border: 1px solid rgba(255,255,255,0.12);
