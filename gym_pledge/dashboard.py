@@ -18,7 +18,7 @@ from ui.scorecard import render as render_scorecard
 from ui.personalization import render as render_personalization
 from ui.monthovermonth import render as render_monthovermonth
 from ui.logyourworkout import render as render_logyourworkout
-
+from pathlib import Path
 
 # =========================================================
 # Page config
@@ -34,9 +34,12 @@ st.set_page_config(
 # Load CSS
 # =========================================================
 
-def load_css(file_path: str):
-    with open(file_path) as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+def load_css(rel_path: str):
+    css_path = Path(__file__).resolve().parent / rel_path
+    st.markdown(
+        f"<style>{css_path.read_text()}</style>",
+        unsafe_allow_html=True
+    )
 
 load_css("styles/theme.css")
 
