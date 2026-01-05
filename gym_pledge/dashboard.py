@@ -10,6 +10,7 @@ import seaborn as sns
 
 import gspread
 from google.oauth2.service_account import Credentials
+from globals import *
 
 
 # =========================================================
@@ -25,155 +26,12 @@ st.set_page_config(
 # =========================================================
 # Clean, modern LIGHT UI (no dark tables)
 # =========================================================
-CSS = """
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
 
-:root{
-  --bg: #F7F9FC;
-  --panel: rgba(255,255,255,0.88);
-  --panel2: rgba(255,255,255,0.96);
-  --text: #0B1220;
-  --muted: rgba(11,18,32,0.62);
-  --border: rgba(11,18,32,0.10);
-  --shadow: 0 14px 38px rgba(11,18,32,0.08);
-  --shadow2: 0 7px 18px rgba(11,18,32,0.07);
-  --r: 18px;
-  --r2: 14px;
-  --accent: rgba(99,102,241,0.95);
-}
+def load_css(file_path: str):
+    with open(file_path) as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-html, body, [class*="css"]{
-  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif !important;
-  color: var(--text);
-}
-
-.stApp{
-  background:
-    radial-gradient(1100px 520px at 6% -10%, rgba(99,102,241,0.16), transparent 55%),
-    radial-gradient(1100px 520px at 94% -10%, rgba(16,185,129,0.14), transparent 55%),
-    radial-gradient(900px 480px at 50% 112%, rgba(59,130,246,0.10), transparent 58%),
-    var(--bg);
-}
-
-.block-container{
-  padding-top: 1.0rem;
-  padding-bottom: 2.2rem;
-  max-width: 1360px;
-}
-
-h1,h2,h3{ letter-spacing:-0.02em; }
-.small-muted{ color: var(--muted); font-size: 0.95rem; }
-
-.card{
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--r);
-  box-shadow: var(--shadow2);
-  padding: 18px 18px;
-}
-
-.cardSolid{
-  background: var(--panel2);
-  border: 1px solid var(--border);
-  border-radius: var(--r);
-  box-shadow: var(--shadow);
-  padding: 18px 18px;
-}
-
-.kpiRow{
-  display:flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.kpi{
-  flex: 1;
-  min-width: 180px;
-  background: var(--panel2);
-  border: 1px solid var(--border);
-  border-radius: var(--r2);
-  box-shadow: var(--shadow2);
-  padding: 14px 14px;
-}
-.kpi .label{ font-size: 0.86rem; color: var(--muted); }
-.kpi .value{ font-size: 1.65rem; font-weight: 800; margin-top: 4px; line-height: 1.1; }
-
-.badge{
-  display:inline-flex;
-  align-items:center;
-  gap:8px;
-  padding: 7px 11px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: rgba(255,255,255,0.75);
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-.dot{
-  width: 8px; height: 8px;
-  border-radius: 999px;
-  background: rgba(16,185,129,0.92);
-}
-
-hr{
-  border: none;
-  border-top: 1px solid var(--border);
-  margin: 14px 0;
-}
-
-/* Sidebar */
-section[data-testid="stSidebar"]{
-  background: rgba(255,255,255,0.62);
-  border-right: 1px solid var(--border);
-  backdrop-filter: blur(12px);
-}
-section[data-testid="stSidebar"] .block-container{
-  padding-top: 1.0rem;
-}
-.sidebar-title{
-  font-weight: 800;
-  font-size: 1.15rem;
-  margin-bottom: 2px;
-}
-.navhint{
-  color: var(--muted);
-  font-size: 0.92rem;
-  margin-bottom: 10px;
-}
-
-/* Make buttons look like nav pills */
-div.stButton > button{
-  width: 100%;
-  border-radius: 14px;
-  border: 1px solid rgba(11,18,32,0.10);
-  background: rgba(255,255,255,0.92);
-  box-shadow: 0 6px 14px rgba(11,18,32,0.06);
-  padding: 0.62rem 0.85rem;
-  font-weight: 650;
-  text-align: left;
-}
-div.stButton > button:hover{
-  transform: translateY(-1px);
-  border-color: rgba(99,102,241,0.28);
-}
-div.stButton > button:focus{
-  outline: none;
-  border-color: rgba(99,102,241,0.40);
-}
-
-/* Dataframe container */
-div[data-testid="stDataFrame"]{
-  border-radius: 16px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow2);
-}
-
-/* Tighten some empty gaps Streamlit adds */
-div[data-testid="stVerticalBlock"] > div:empty { display:none; }
-</style>
-"""
-st.markdown(CSS, unsafe_allow_html=True)
+load_css("styles/theme.css")
 
 
 # =========================================================
@@ -182,27 +40,13 @@ st.markdown(CSS, unsafe_allow_html=True)
 def style_plots():
     sns.set_theme(style="darkgrid", palette="muted")
     mpl.rcParams["figure.dpi"] = 150
-    plt.rcParams["font.family"] = "Consolas"
+    plt.rcParams["font.family"] = "Roboto"
 
 
 def set_title_labels(ax, title, xlabel="", ylabel=""):
     ax.set_title(title, fontsize=12, fontweight="bold")
     ax.set_xlabel(xlabel, fontsize=9, fontweight="bold")
     ax.set_ylabel(ylabel, fontsize=9, fontweight="bold")
-
-
-# =========================================================
-# Google Sheets auth (from notebook)
-# =========================================================
-SPREADSHEET_ID = "17RADj_LH-Lj_lB8QFZyxjv8iKFerNZfNT-7wmtPNuzk"
-WORKSHEET_NAME = "Form Responses"
-SERVICE_ACCOUNT_JSON_PATH = "secrets/service_account.json"
-
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets.readonly",
-    "https://www.googleapis.com/auth/drive.readonly",
-]
-
 
 def read_google_sheet_as_df(spreadsheet_id: str, worksheet_name: str) -> pd.DataFrame:
     creds = Credentials.from_service_account_info(dict(st.secrets["gcp_service_account"]), scopes=SCOPES)
@@ -303,25 +147,42 @@ def month_bounds(month_str: str):
     return date(y, m, 1), date(y, m, last_day)
 
 
-def month_leaderboard(df: pd.DataFrame, month_str: str, cutoff: int) -> pd.DataFrame:
+def month_leaderboard(df: pd.DataFrame, month_str: str, cutoff: int, all_users=None) -> pd.DataFrame:
     d = df[(df["month"] == month_str) & (df["workout_date"].notna())].copy()
+
 
     any_days = d.groupby("name")["workout_date"].nunique().rename("workout_days").reset_index()
     qual_days = d[d["burnt_250"]].groupby("name")["workout_date"].nunique().rename("qualifying_days").reset_index()
 
+
     out = any_days.merge(qual_days, on="name", how="left")
     out["qualifying_days"] = out["qualifying_days"].fillna(0).astype(int)
     out["workout_days"] = out["workout_days"].fillna(0).astype(int)
-    out["workouts_left"] = (cutoff - out["qualifying_days"]).clip(lower=0).astype(int)
+    
+
+    if all_users is not None:
+        all_users_df = pd.DataFrame({"name": list(all_users)})
+        out = all_users_df.merge(out, on="name", how="left").fillna(0)
+        out["qualifying_days"] = out["qualifying_days"].astype(int)
+        out["workout_days"] = out["workout_days"].astype(int)
+
+    out["workouts_left"] = (cutoff - out["qualifying_days"]).clip(lower=0)
     out["is_winner"] = out["qualifying_days"] >= cutoff
     out["progress"] = (out["qualifying_days"] / max(cutoff, 1)).clip(0, 1)
+    out["rank"] = (
+        out["qualifying_days"]
+        .rank(method="dense", ascending=False)
+        .astype(int)
+    )
+
 
     out = out.sort_values(
-        ["is_winner", "qualifying_days", "workout_days", "name"],
-        ascending=[False, False, False, True],
+        ["rank", "is_winner", "qualifying_days", "workout_days", "name"],
+        ascending=[True, False, False, False, True],
     ).reset_index(drop=True)
 
     return out
+
 
 
 def longest_streak(dates):
@@ -391,25 +252,6 @@ def frontload_vs_cram(df_month: pd.DataFrame):
 
 
 # =========================================================
-# Table styling (force light table even if Streamlit theme is dark)
-# =========================================================
-def light_table(df: pd.DataFrame):
-    def _style(_):
-        return pd.DataFrame("", index=df.index, columns=df.columns)
-
-    styler = df.style
-    styler = styler.set_table_styles(
-        [
-            {"selector": "th", "props": [("background-color", "#FFFFFF"), ("color", "#0B1220"), ("font-weight", "700")]},
-            {"selector": "td", "props": [("background-color", "#FFFFFF"), ("color", "#0B1220")]},
-            {"selector": "table", "props": [("border", "1px solid rgba(11,18,32,0.10)"), ("border-collapse", "collapse")]},
-        ]
-    )
-    styler = styler.set_properties(**{"border": "1px solid rgba(11,18,32,0.08)"})
-    return styler
-
-
-# =========================================================
 # Sidebar navigation (buttons, no emojis)
 # =========================================================
 if "tab" not in st.session_state:
@@ -417,9 +259,6 @@ if "tab" not in st.session_state:
 
 
 with st.sidebar:
-    st.markdown("<div class='sidebar-title'>Gym Kitty</div>", unsafe_allow_html=True)
-    st.markdown("<div class='navhint'>Choose a view</div>", unsafe_allow_html=True)
-
     if st.button("Leaderboard", use_container_width=True):
         st.session_state["tab"] = "Leaderboard"
     if st.button("Scorecard", use_container_width=True):
@@ -429,18 +268,7 @@ with st.sidebar:
     if st.button("Month-over-month Trends", use_container_width=True):
         st.session_state["tab"] = "Month-over-month Trends"
 
-    st.markdown("---")
-    st.markdown("### Settings")
-    WINNER_CUTOFF = st.number_input("Winner cutoff (qualifying days)", 1, 31, 16, 1)
-    dedupe = st.toggle("De-duplicate (keep latest per day)", value=True)
-
-    st.markdown("---")
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("Refresh data", use_container_width=True):
-            st.cache_data.clear()
-    with c2:
-        st.caption("Cache: 45s")
+    dedupe = True
 
 
 # =========================================================
@@ -471,33 +299,14 @@ default_idx = months.index(cur) if cur in months else (len(months) - 1)
 # =========================================================
 # Top header bar (tight + aligned)
 # =========================================================
-st.markdown(
-    """
-<div class="cardSolid">
-  <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px;">
-    <div>
-      <div style="font-size:1.8rem; font-weight:800; line-height:1.12;">Gym Kitty Dashboard</div>
-      <div class="small-muted">Live leaderboard • scorecard insights • personalization • trends</div>
-    </div>
-    <div class="badge"><span class="dot"></span> Live from Google Sheets</div>
-  </div>
-</div>
-""",
-    unsafe_allow_html=True,
-)
+
 st.write("")
 
 top = st.columns([1.2, 1.2, 1.1, 1.0], gap="medium")
 with top[0]:
     month_selected = st.selectbox("Month", months, index=default_idx)
-with top[1]:
-    st.markdown(f"<span class='badge'>Sheet tab: {WORKSHEET_NAME}</span>", unsafe_allow_html=True)
-with top[2]:
-    st.markdown(f"<span class='badge'>Sheet: …{SPREADSHEET_ID[-8:]}</span>", unsafe_allow_html=True)
-with top[3]:
-    st.markdown(f"<span class='badge'>Cutoff: {WINNER_CUTOFF} days</span>", unsafe_allow_html=True)
-
-lb = month_leaderboard(df, month_selected, WINNER_CUTOFF)
+    
+lb = month_leaderboard(df, month_selected, WINNER_CUTOFF, USERS)
 df_month = df[(df["month"] == month_selected) & (df["workout_date"].notna())].copy()
 
 tab = st.session_state["tab"]
@@ -510,56 +319,51 @@ if tab == "Leaderboard":
     left, right = st.columns([1.9, 1.0], gap="large")
 
     with left:
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
         st.subheader("Live Leaderboard")
 
         winners = lb[lb["is_winner"]]
         total_people = int(lb["name"].nunique())
         winner_count = int(winners["name"].nunique())
-        total_qual = int(lb["qualifying_days"].sum())
 
         st.markdown(
             f"""
 <div class="kpiRow">
   <div class="kpi"><div class="label">Participants</div><div class="value">{total_people}</div></div>
   <div class="kpi"><div class="label">Winners</div><div class="value">{winner_count}</div></div>
-  <div class="kpi"><div class="label">Total qualifying days</div><div class="value">{total_qual}</div></div>
 </div>
 """,
             unsafe_allow_html=True,
         )
         st.write("")
 
-        show = lb.copy()
-        show.insert(0, "Status", np.where(show["is_winner"], "Winner", ""))
-        show = show.rename(
-            columns={
-                "name": "Name",
-                "qualifying_days": "Qualifying Days",
-                "workouts_left": "Workouts Left",
-                "workout_days": "Workout Days",
-                "progress": "Progress",
-            }
-        )
+        max_workouts = 16
 
-        st.dataframe(
-            show[["Status", "Name", "Qualifying Days", "Workouts Left", "Workout Days", "Progress"]],
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Progress": st.column_config.ProgressColumn(
-                    "Progress",
-                    min_value=0.0,
-                    max_value=1.0,
-                    format="%.0f%%",
-                    help="Qualifying progress toward cutoff",
-                )
-            },
-        )
+        st.markdown("<div class='leaderboard'>", unsafe_allow_html=True)
+
+        for _, row in lb.iterrows():
+            progress = int((row["qualifying_days"] / max_workouts) * 100)
+            winner_class = "winner" if row["is_winner"] else ""
+
+            st.markdown(
+                f"""
+                <div class="lb-row {winner_class}">
+                <div class="lb-rank">#{row['rank']}</div>
+                <div class="lb-name">{row['name']}</div>
+                <div class="lb-workouts">{row['qualifying_days']} workouts</div>
+
+                <div class="lb-bar-wrap">
+                    <div class="lb-bar" style="width:{progress}%"></div>
+                </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
         st.markdown("</div>", unsafe_allow_html=True)
 
+
     with right:
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
+
         st.subheader("Workouts left (by person)")
 
         people = sorted(lb["Name"].dropna().unique().tolist()) if "Name" in lb.columns else sorted(lb["name"].dropna().unique().tolist())
@@ -570,40 +374,62 @@ if tab == "Leaderboard":
         qdays = int(row["qualifying_days"])
         wdays = int(row["workout_days"])
 
-        st.markdown("<div class='cardSolid'>", unsafe_allow_html=True)
+
         st.markdown(f"### {who}")
         st.markdown("<div class='small-muted'>This month</div>", unsafe_allow_html=True)
-        st.markdown(f"- Qualifying: **{qdays} / {WINNER_CUTOFF}**")
-        st.markdown(f"- Workout days (any): **{wdays}**")
-        st.markdown(f"#### Remaining: **{remaining}**")
-        if remaining == 0:
-            st.success("Winner locked")
-        else:
-            st.info("Keep going")
-        st.markdown("</div>", unsafe_allow_html=True)
 
-        style_plots()
-        q = df_month[(df_month["name"] == who) & (df_month["burnt_250"])].copy()
-        if not q.empty:
-            g = q.groupby("dom")["workout_date"].count().reset_index(name="count")
-            fig, ax = plt.subplots(figsize=(6.2, 2.7))
-            sns.barplot(data=g, x="dom", y="count", ax=ax)
-            set_title_labels(ax, "Qualifying workouts by day-of-month", "Day", "Count")
-            ax.tick_params(axis="x", labelrotation=0)
-            st.pyplot(fig, use_container_width=True)
+        completed = qdays
+        remaining = max(WINNER_CUTOFF - completed, 0)
+
+        # ---- DONUT CHART ----
+        fig, ax = plt.subplots()
+
+        values = [(completed*100)/16, (remaining*100)/16]
+
+        ax.pie(
+            values,
+            startangle=90,
+            counterclock=False,
+            wedgeprops=dict(width=0.2, edgecolor="none"),
+        )
+
+        # Center text
+        ax.text(
+            0, 0.05,
+            f"{remaining}",
+            ha="center",
+            va="center",
+            fontsize=30,
+            fontweight="800",
+            color="#E4E6EB",
+        )
+
+        ax.text(
+            0, -0.18,
+            "days left",
+            ha="center",
+            va="center",
+            fontsize=15,
+            color="#A0A4B3",
+        )
+        ax.axis("equal")
+
+        st.pyplot(fig, transparent=True)
+
+        # ---- STATUS ----
+        if remaining == 0:
+            st.success("Winner locked 🏆")
         else:
-            st.caption("No qualifying workouts yet for this person.")
-        st.markdown("</div>", unsafe_allow_html=True)
+            st.info("Keep Going !")
 
 
 # =========================================================
 # Scorecard
 # =========================================================
 elif tab == "Scorecard":
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.subheader("Scorecard")
-    st.markdown("<div class='small-muted'>Longest streak • fastest winner • lazy logger • front-loading vs cramming • barely missed</div>", unsafe_allow_html=True)
     st.markdown("<hr>", unsafe_allow_html=True)
+
+    winner_df = lb[lb["rank"] == 2].reset_index(drop=True)
 
     streak_rows = []
     for name, g in df_month[df_month["burnt_250"]].groupby("name"):
@@ -626,18 +452,52 @@ elif tab == "Scorecard":
     consistent_not_qual = lb[(~lb["is_winner"]) & (lb["workout_days"] >= WINNER_CUTOFF)].copy()
     consistent_not_qual = consistent_not_qual.rename(columns={"name":"Name","qualifying_days":"Qualifying Days","workouts_left":"Workouts Left","workout_days":"Workout Days"})
 
+    st.markdown("### Winners!! ")
+    for _, row in winner_df.iterrows():
+        winner_class = "winner" if row["is_winner"] else ""
+
+        st.markdown(
+            f"""
+            <div class="lb-row {winner_class}">
+            <div class="lb-rank">#{row['rank']}</div>
+            <div class="lb-name">{row['name']}</div>
+            <div class="lb-workouts">{row['qualifying_days']} workouts</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    st.markdown("<hr>", unsafe_allow_html=True)
+
     a, b, c = st.columns(3, gap="large")
 
     with a:
-        st.markdown("<div class='cardSolid'>", unsafe_allow_html=True)
-        st.markdown("### Longest streak")
-        if not streak_df.empty:
-            top = streak_df.iloc[0]
-            st.markdown(f"**Leader:** {top['Name']} — **{int(top['Longest Streak'])} days**")
-            st.dataframe(streak_df.head(12), hide_index=True, use_container_width=True)
-        else:
-            st.caption("No qualifying streaks yet.")
-        st.markdown("</div>", unsafe_allow_html=True)
+
+        with st.container():
+            st.markdown("### Longest streak")
+
+            if not streak_df.empty:
+                top = streak_df.iloc[0]
+                st.markdown(
+                    f"**Leader:** {top['Name']} — **{int(top['Longest Streak'])} days**"
+                )
+                st.dataframe(
+                    streak_df.head(12),
+                    hide_index=True,
+                    use_container_width=True,
+                )
+            else:
+                st.caption("No qualifying streaks yet.")
+
+
+        # st.markdown("<div class='cardSolid'>", unsafe_allow_html=True)
+        # st.markdown("### Longest streak")
+        # if not streak_df.empty:
+        #     top = streak_df.iloc[0]
+        #     st.markdown(f"**Leader:** {top['Name']} — **{int(top['Longest Streak'])} days**")
+        #     st.table(streak_df.head(12), hide_index=True, use_container_width=True)
+        # else:
+        #     st.caption("No qualifying streaks yet.")
+        # st.markdown("</div>", unsafe_allow_html=True)
 
     with b:
         st.markdown("<div class='cardSolid'>", unsafe_allow_html=True)
@@ -691,7 +551,7 @@ elif tab == "Scorecard":
         st.dataframe(consistent_not_qual[["Name","Qualifying Days","Workouts Left","Workout Days"]], hide_index=True, use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("</div>", unsafe_allow_html=True)
+
 
 
 # =========================================================
