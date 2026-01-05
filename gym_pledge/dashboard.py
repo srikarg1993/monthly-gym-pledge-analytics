@@ -204,9 +204,8 @@ SCOPES = [
 ]
 
 
-@st.cache_data(ttl=45, show_spinner=False)
-def read_google_sheet_as_df(spreadsheet_id: str, worksheet_name: str, json_path: str) -> pd.DataFrame:
-    creds = Credentials.from_service_account_file(json_path, scopes=SCOPES)
+def read_google_sheet_as_df(spreadsheet_id: str, worksheet_name: str) -> pd.DataFrame:
+    creds = Credentials.from_service_account_info(dict(st.secrets["gcp_service_account"]), scopes=SCOPES)
     gc = gspread.authorize(creds)
     sh = gc.open_by_key(spreadsheet_id)
     ws = sh.worksheet(worksheet_name)
@@ -448,7 +447,7 @@ with st.sidebar:
 # Load and clean
 # =========================================================
 try:
-    raw = read_google_sheet_as_df(SPREADSHEET_ID, WORKSHEET_NAME, SERVICE_ACCOUNT_JSON_PATH)
+    raw = read_google_sheet_as_df(SPREADSHEET_ID, WORKSHEET_NAME)
 except Exception as e:
     st.error("Could not read Google Sheet. Check: secrets/service_account.json and share the sheet with the service-account email.")
     st.exception(e)
