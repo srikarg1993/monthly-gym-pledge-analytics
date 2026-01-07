@@ -54,8 +54,8 @@ if "tab" not in st.session_state:
 with st.sidebar:
     if st.button("Leaderboard", use_container_width=True):
         st.session_state["tab"] = "Leaderboard"
-    # if st.button("Scorecard", use_container_width=True):
-    #     st.session_state["tab"] = "Scorecard"
+    if st.button("Scorecard", use_container_width=True):
+        st.session_state["tab"] = "Scorecard"
     # if st.button("Personalization", use_container_width=True):
     #     st.session_state["tab"] = "Personalization"
     # if st.button("Month-over-month Trends", use_container_width=True):
@@ -79,18 +79,30 @@ if not months:
 cur = current_month_str()
 default_idx = months.index(cur) if cur in months else (len(months) - 1)
 
-st.write("")
-st.write("")
-st.markdown("# Monthly Pledge to Fitness ")
+header_cols = st.columns([1, 0.28], gap="large")
+with header_cols[0]:
+    st.markdown("# Monthly Pledge to Fitness ")
+with header_cols[1]:
+    st.markdown("<div style='white-space:nowrap; font-size:18px; font-weight:600'>Month</div>", unsafe_allow_html=True)
+    # Hide month selector on pages where it isn't needed (Leaderboard and Log Your Workout)
+    current_tab = st.session_state.get("tab", "")
+    if ("Log Your Workout" not in current_tab) and (current_tab != "Leaderboard"):
+        month_selected = st.selectbox("", months, index=default_idx, label_visibility="collapsed")
+    else:
+        month_selected = months[default_idx]
+
 st.markdown("<hr>", unsafe_allow_html=True)
-top = st.columns([1.2, 1.2, 1.1, 1.0], gap="medium")
-with top[0]:
-    month_selected = st.selectbox("Month", months, index=default_idx)
 
-lb = month_leaderboard(df, month_selected, WINNER_CUTOFF, USERS)
+# Choose leaderboard month: always use current month for the Leaderboard tab
+tab = st.session_state.get("tab", "Leaderboard")
+if tab == "Leaderboard":
+    lb_month = current_month_str()
+else:
+    lb_month = month_selected
+
+lb = month_leaderboard(df, lb_month, WINNER_CUTOFF, USERS)
+# df_month represents the selected month for other pages (Scorecard etc.)
 df_month = df[(df["month"] == month_selected) & (df["workout_date"].notna())].copy()
-
-tab = st.session_state["tab"]
 
 
 # =========================================================

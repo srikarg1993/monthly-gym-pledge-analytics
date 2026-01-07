@@ -32,9 +32,10 @@ def month_leaderboard(df: pd.DataFrame, month_str: str, cutoff: int, all_users=N
     )
 
 
+    # Order leaderboard by qualifying workouts (desc) then alphabetically by name (asc)
     out = out.sort_values(
-        ["rank", "is_winner", "qualifying_days", "workout_days", "name"],
-        ascending=[True, False, False, False, True],
+        ["qualifying_days", "name"],
+        ascending=[False, True],
     ).reset_index(drop=True)
 
     return out
