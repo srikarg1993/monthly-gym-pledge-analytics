@@ -1,8 +1,10 @@
+"""Data source helpers: reading and cleaning raw sheet data."""
+
 import pandas as pd
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
-from config.globals import *
+from config.globals import SCOPES, SPREADSHEET_ID, WORKSHEET_NAME
 
 
 def read_google_sheet_as_df(spreadsheet_id: str, worksheet_name: str) -> pd.DataFrame:

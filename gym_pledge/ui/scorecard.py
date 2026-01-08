@@ -1,10 +1,14 @@
 import pandas as pd
-import matplotlib.pyplot as plt
+import streamlit as st
 
-from config.globals import *
-from data.source import *
-from data.metrics import *
-from ui.common import *
+from config.globals import WINNER_CUTOFF
+from data.metrics import (
+    longest_streak,
+    fastest_winner_date,
+    lazy_logger_score,
+    frontload_vs_cram,
+)
+from ui.common import render_styled_table, alt_weekday_bubble, render_card_start, render_card_end
 import altair as alt
 
 
@@ -41,44 +45,7 @@ def render(*, lb, df_month) -> None:
         for i in range(0, len(df), n):
             yield df.iloc[i:i + n]
 
-    def render_styled_table(df: pd.DataFrame, max_rows: int | None = None) -> None:
-        """Render a styled HTML table with white bold headers to match page style."""
-        if df is None or df.empty:
-            st.caption("No data to display.")
-            return
-
-        display_df = df.copy()
-        if max_rows is not None:
-            display_df = display_df.head(max_rows)
-
-        # Build HTML table
-        table_html = """
-        <style>
-            .styled-table { width:100%; border-collapse:collapse; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-            .styled-table th { background: #0b1220; color: #fff; padding:10px 12px; text-align:left; font-weight:700; font-size:14px; }
-            .styled-table td { padding:10px 12px; border-bottom:1px solid rgba(255,255,255,0.04); color: #d1d5db; }
-            .styled-table tr:hover td { background: rgba(255,255,255,0.02); }
-        </style>
-        <table class="styled-table">
-            <thead><tr>
-        """
-
-        for col in display_df.columns:
-            table_html += f"<th>{col}</th>"
-
-        table_html += """
-            </tr></thead><tbody>
-        """
-
-        for _, row in display_df.iterrows():
-            table_html += "<tr>"
-            for val in row:
-                table_html += f"<td>{val}</td>"
-            table_html += "</tr>"
-
-        table_html += "</tbody></table>"
-
-        st.markdown(table_html, unsafe_allow_html=True)
+    # use shared helper from ui.common: render_styled_table
 
     # Render winners as tiles in rows of 4 columns
     if winner_df.empty:
@@ -98,8 +65,35 @@ def render(*, lb, df_month) -> None:
                         """,
                         unsafe_allow_html=True,
                     )
+    # Big-picture group summary stats
+    total_participants = int(lb["name"].nunique()) if "name" in lb.columns else int(len(lb))
+    total_winners = int(lb.get("is_winner", pd.Series(dtype=int)).sum()) if not lb.empty else 0
+    total_workouts = int(lb.get("workout_days", pd.Series(dtype=int)).sum()) if not lb.empty else 0
+    total_calories = int(((lb.get("qualifying_days", 0) * 250) + ((lb.get("workout_days", 0) - lb.get("qualifying_days", 0)) * 150)).sum()) if not lb.empty else 0
+    
+    ### Group Summary Stats ###
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown("### Highlights of our group pledge this month:")
 
-    # st.markdown("<hr>", unsafe_allow_html=True)
+    stat_cols = st.columns(4, gap="small")
+    stats = [
+        ("Total Participants", f"{total_participants}"),
+        ("Total Winners", f"{total_winners}"),
+        ("Total Workouts", f"{total_workouts}"),
+        ("Approx Calories Burned", f"{total_calories:,} Cal"),
+    ]
+
+    for c, (label, value) in zip(stat_cols, stats):
+        with c:
+            st.markdown(
+                f"""
+                <div style='background: rgba(255,255,255,0.02); padding:14px; border-radius:8px; text-align:center;'>
+                  <div style='font-size:20px; font-weight:700; color:#fff;'>{value}</div>
+                  <div style='font-size:12px; color:#9aa0ab; margin-top:6px;'>{label}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
     # Summary table with all participants
     summary_table = lb.copy()
@@ -115,14 +109,12 @@ def render(*, lb, df_month) -> None:
 
     # Month summary in a card-like container (matches other small cards)
     with st.container(key="month_summary"):
-        st.markdown("### Monthly Summary")
-        # st.markdown(
-        #     "<div style='border-radius:10px; padding:16px; background-color: rgba(255,255,255,0.09) !important; border:1px solid rgba(255,255,255,0.12); box-shadow: 0 2px 6px rgba(0,0,0,0.15);'>",
-        #     unsafe_allow_html=True,
-        # )
+        # render_card_start(title="Monthly Summary")
+        st.markdown("### Monthly Individual Summary")
         render_styled_table(summary_table)
-        st.markdown("</div>", unsafe_allow_html=True)
-
+        render_card_end()
+        
+    st.markdown("<hr>", unsafe_allow_html=True)
     a, b, c = st.columns(3, gap="small")
 
     with a:
@@ -177,38 +169,6 @@ def render(*, lb, df_month) -> None:
                     .reset_index(name="People")
                 )
 
-                # chart = (
-                #     alt.Chart(counts)
-                #     .mark_bar(
-                #         size=28,
-                #         cornerRadiusTopLeft=6,
-                #         cornerRadiusTopRight=6,
-                #     )
-                #     .encode(
-                #         x=alt.X(
-                #             "Style:N",
-                #             sort="-y",
-                #             title="Style",
-                #             axis=alt.Axis(labelAngle=0),
-                #         ),
-                #         y=alt.Y(
-                #             "People:Q",
-                #             title="People",
-                #             scale=alt.Scale(nice=True),
-                #         ),
-                #         tooltip=["Style:N", "People:Q"],
-                #     )
-                #     .properties(
-                #         height=260,
-                #     )
-                # )
-
-                # Disabled distribution-of-styles chart per request
-                # st.markdown("### Distribution of styles")
-                # st.altair_chart(chart, use_container_width=True)
-            else:
-                st.caption("Not enough data.")
-
     with right:
         with st.container( key="barely_missed"):
             st.markdown("### Missed by a hair")
@@ -217,3 +177,35 @@ def render(*, lb, df_month) -> None:
             st.markdown("### Building the Habit")    
             st.caption("Strong consistency this month — qualifying days are the next unlock.")
             render_styled_table(consistent_not_qual[["Name","Qualifying Days","Workouts Left","Workout Days"]])
+
+    # Bubble plot: workouts by weekday (delegated to helper)
+    with st.container(key="weekday_bubble"):
+        st.markdown("### Workouts by Weekday")
+        st.caption("Each bubble shows total workouts logged on that weekday (all workouts, not only qualifying).")
+        if df_month is None or df_month.empty:
+            st.caption("No workout data for the selected month.")
+        else:
+            try:
+                dates = pd.to_datetime(df_month["workout_date"])
+            except Exception:
+                dates = df_month["workout_date"]
+
+            wd = (
+                dates.dt.day_name().rename("Weekday").to_frame().assign(count=1)
+            )
+            counts = wd.groupby("Weekday")["count"].sum().reset_index()
+
+            weekday_order = [
+                "Monday",
+                "Tuesday",
+                "Wednesday",
+                "Thursday",
+                "Friday",
+                "Saturday",
+                "Sunday",
+            ]
+            counts["Weekday"] = pd.Categorical(counts["Weekday"], categories=weekday_order, ordered=True)
+            counts = counts.sort_values("Weekday")
+
+            chart = alt_weekday_bubble(counts=counts, weekday_order=weekday_order)
+            st.altair_chart(chart, use_container_width=True)

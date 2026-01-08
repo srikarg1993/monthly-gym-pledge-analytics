@@ -1,16 +1,15 @@
+"""Personalization page: per-person day-of-week trends and comparison charts."""
+
 import pandas as pd
 import matplotlib.pyplot as plt
+import streamlit as st
+import seaborn as sns
 
-from config.globals import *
-from data.source import *
-from data.metrics import *
-from ui.common import *
+from ui.common import style_plots, set_title_labels, render_seaborn_line, render_card_start, render_card_end
 
 
 def render(*, df_month) -> None:
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.subheader("Personalization")
-    st.markdown("<div class='small-muted'>Day-of-week trends (overall vs selected person)</div>", unsafe_allow_html=True)
+    render_card_start(title="Personalization", subtitle="Day-of-week trends (overall vs selected person)")
     st.markdown("<hr>", unsafe_allow_html=True)
 
     people = sorted(df_month["name"].dropna().unique().tolist())
@@ -37,21 +36,15 @@ def render(*, df_month) -> None:
 
     left, right = st.columns(2, gap="large")
     with left:
-        st.markdown("<div class='cardSolid'>", unsafe_allow_html=True)
-        fig, ax = plt.subplots(figsize=(6.9, 3.2))
-        sns.barplot(data=overall, x="dow", y="Unique workout days", ax=ax)
-        set_title_labels(ax, "Overall workouts by weekday", "Weekday", "Unique days")
-        ax.tick_params(axis="x", labelrotation=18)
+        render_card_start()
+        fig = render_seaborn_line(overall, x="dow", y="Unique workout days", title="Overall workouts by weekday", xlabel="Weekday", ylabel="Unique days", figsize=(6.9, 3.2))
         st.pyplot(fig, use_container_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+        render_card_end()
 
     with right:
-        st.markdown("<div class='cardSolid'>", unsafe_allow_html=True)
-        fig, ax = plt.subplots(figsize=(6.9, 3.2))
-        sns.barplot(data=person, x="dow", y="Unique workout days", ax=ax)
-        set_title_labels(ax, f"{who}: workouts by weekday", "Weekday", "Unique days")
-        ax.tick_params(axis="x", labelrotation=18)
+        render_card_start()
+        fig = render_seaborn_line(person, x="dow", y="Unique workout days", title=f"{who}: workouts by weekday", xlabel="Weekday", ylabel="Unique days", figsize=(6.9, 3.2))
         st.pyplot(fig, use_container_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+        render_card_end()
 
-    st.markdown("</div>", unsafe_allow_html=True)
+    render_card_end()

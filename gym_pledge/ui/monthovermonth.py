@@ -1,16 +1,16 @@
+"""Month-over-month trends page: participation, winners, and intensity over time."""
+
 import pandas as pd
 import matplotlib.pyplot as plt
+import streamlit as st
+import seaborn as sns
 
-from config.globals import *
-from data.source import *
-from data.metrics import *
-from ui.common import *
+from config.globals import WINNER_CUTOFF
+from ui.common import style_plots, set_title_labels, render_seaborn_line, render_card_start, render_card_end
 
 
 def render(*, df) -> None:
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.subheader("Month-over-month Trends")
-    st.markdown("<div class='small-muted'>Participation, winners, and qualifying intensity over time</div>", unsafe_allow_html=True)
+    render_card_start(title="Month-over-month Trends", subtitle="Participation, winners, and qualifying intensity over time")
     st.markdown("<hr>", unsafe_allow_html=True)
 
     participants = df[df["any_workout"]].groupby("month")["name"].nunique().reset_index(name="Participants")
@@ -39,33 +39,23 @@ def render(*, df) -> None:
 
     st.dataframe(mom, hide_index=True, use_container_width=True)
 
-    style_plots()
     c1, c2 = st.columns(2, gap="large")
 
     with c1:
-        st.markdown("<div class='cardSolid'>", unsafe_allow_html=True)
-        fig, ax = plt.subplots(figsize=(7.2, 3.2))
-        sns.lineplot(data=mom, x="month", y="Participants", marker="o", ax=ax)
-        set_title_labels(ax, "Participants per month", "Month", "Participants")
-        ax.tick_params(axis="x", labelrotation=18)
+        render_card_start()
+        fig = render_seaborn_line(mom, x="month", y="Participants", title="Participants per month", xlabel="Month", ylabel="Participants")
         st.pyplot(fig, use_container_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+        render_card_end()
 
-        st.markdown("<div class='cardSolid'>", unsafe_allow_html=True)
-        fig, ax = plt.subplots(figsize=(7.2, 3.2))
-        sns.lineplot(data=mom, x="month", y="Winners", marker="o", ax=ax)
-        set_title_labels(ax, "Winners per month", "Month", "Winners")
-        ax.tick_params(axis="x", labelrotation=18)
+        render_card_start()
+        fig = render_seaborn_line(mom, x="month", y="Winners", title="Winners per month", xlabel="Month", ylabel="Winners")
         st.pyplot(fig, use_container_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+        render_card_end()
 
     with c2:
-        st.markdown("<div class='cardSolid'>", unsafe_allow_html=True)
-        fig, ax = plt.subplots(figsize=(7.2, 3.2))
-        sns.lineplot(data=mom, x="month", y="Avg qualifying days / person", marker="o", ax=ax)
-        set_title_labels(ax, "Avg qualifying intensity", "Month", "Avg qualifying days")
-        ax.tick_params(axis="x", labelrotation=18)
+        render_card_start()
+        fig = render_seaborn_line(mom, x="month", y="Avg qualifying days / person", title="Avg qualifying intensity", xlabel="Month", ylabel="Avg qualifying days")
         st.pyplot(fig, use_container_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+        render_card_end()
 
-    st.markdown("</div>", unsafe_allow_html=True)
+    render_card_end()

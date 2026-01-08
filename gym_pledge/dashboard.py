@@ -1,18 +1,9 @@
-import calendar
 from datetime import date
-import numpy as np
-import pandas as pd
 import streamlit as st
 
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-import seaborn as sns
-
-import gspread
-from google.oauth2.service_account import Credentials
-from config.globals import *
-from data.source import *
-from data.metrics import *
+from config.globals import WINNER_CUTOFF, USERS
+from data.source import get_data
+from data.metrics import month_leaderboard
 from ui.leaderboard import render as render_leaderboard
 from ui.scorecard import render as render_scorecard
 from ui.personalization import render as render_personalization

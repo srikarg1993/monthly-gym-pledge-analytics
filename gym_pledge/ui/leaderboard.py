@@ -1,11 +1,16 @@
+"""Leaderboard UI rendering helpers.
+
+Provides functions to render the live leaderboard and person-level
+details used by the main `dashboard` app.
+"""
+
 import matplotlib.pyplot as plt
 import streamlit as st
 from datetime import datetime
 
 
 from config.globals import WINNER_CUTOFF
-from data.source import *     
-from data.metrics import *     
+from ui.common import render_donut_days_left
 
 
 def _name_col(df):
@@ -148,4 +153,10 @@ def render(*, df) -> None:
         st.markdown(f"### {who}")
         st.markdown("<div class='small-muted'>This month</div>", unsafe_allow_html=True)
 
-        _donut_days_left(completed=qdays, cutoff=WINNER_CUTOFF)
+        fig, remaining = render_donut_days_left(completed=qdays, cutoff=WINNER_CUTOFF)
+        st.pyplot(fig, transparent=True)
+
+        if remaining == 0:
+            st.success("Winner locked 🏆")
+        else:
+            st.info("Keep going!")

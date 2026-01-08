@@ -1,3 +1,9 @@
+"""Metric computations for the Monthly Gym Pledge.
+
+Contains leaderboard and per-person convenience functions used by the
+dashboard UI.
+"""
+
 import pandas as pd
 import calendar
 from datetime import date
