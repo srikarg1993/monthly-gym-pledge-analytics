@@ -36,7 +36,7 @@ def _render_kpis(lb, name_col: str) -> None:
             <div class="value">{winner_count}</div>
           </div>
           <div class="kpi">
-            <div class="label">Month</div>
+            <div class="label">Current Month</div>
             <div class="value">{month_year}</div>
           </div>
         </div>
