@@ -74,10 +74,11 @@ header_cols = st.columns([1, 0.28], gap="large")
 with header_cols[0]:
     st.markdown("# Monthly Pledge to Fitness ")
 with header_cols[1]:
-    st.markdown("<div style='white-space:nowrap; font-size:18px; font-weight:600'>Month</div>", unsafe_allow_html=True)
+    
     # Hide month selector on pages where it isn't needed (Leaderboard and Log Your Workout)
     current_tab = st.session_state.get("tab", "")
     if ("Log Your Workout" not in current_tab) and (current_tab != "Leaderboard"):
+        st.markdown("<div style='white-space:nowrap; font-size:18px; font-weight:600'>Month</div>", unsafe_allow_html=True)
         month_selected = st.selectbox("", months, index=default_idx, label_visibility="collapsed")
     else:
         month_selected = months[default_idx]
