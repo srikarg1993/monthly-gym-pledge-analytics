@@ -180,7 +180,7 @@ def render(*, lb, df_month) -> None:
 
     # Bubble plot: workouts by weekday (delegated to helper)
     with st.container(key="weekday_bubble"):
-        st.markdown("### Workouts by Weekday")
+        st.markdown("### Workouts by Day of the Week")
         st.caption("Each bubble shows total workouts logged on that weekday (all workouts, not only qualifying).")
         if df_month is None or df_month.empty:
             st.caption("No workout data for the selected month.")
