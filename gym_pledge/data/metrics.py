@@ -93,8 +93,8 @@ def frontload_vs_cram(df_month: pd.DataFrame):
 
     d = df_month[df_month["burnt_250"]].copy()
 
-    def split_counts(x):
-        days = sorted(set(x["workout_date"].dropna().tolist()))
+    def split_counts(workout_dates):
+        days = sorted(set(workout_dates.dropna().tolist()))
         first = sum(1 for dd in days if dd <= mid)
         second = sum(1 for dd in days if dd > mid)
         total = first + second
@@ -108,7 +108,7 @@ def frontload_vs_cram(df_month: pd.DataFrame):
             style = "Balanced"
         return pd.Series({"first_half": first, "second_half": second, "style": style})
 
-    out = d.groupby("name").apply(split_counts).reset_index()
+    out = d.groupby("name")["workout_date"].apply(split_counts).unstack().reset_index()
     return out.sort_values(["style", "first_half"], ascending=[True, False])
 
 def month_bounds(month_str: str):
