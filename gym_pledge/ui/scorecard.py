@@ -180,20 +180,31 @@ def render(*, lb, df_month) -> None:
 
     # Bubble plot: workouts by weekday (delegated to helper)
     with st.container(key="weekday_bubble"):
-        st.markdown("### Workouts by Day of the Week")
-        st.caption("Each bubble shows total workouts logged on that weekday (all workouts, not only qualifying).")
+        title_col, filter_col = st.columns([3.2, 1.2], gap="large")
+        with title_col:
+            st.markdown("### Workouts by Day of the Week")
+            st.caption("Each bubble shows total workouts logged on that weekday (all workouts, not only qualifying).")
+        with filter_col:
+            candidate_options = sorted(df_month["name"].dropna().unique().tolist()) if df_month is not None else []
+            candidate_options = ["All"] + candidate_options
+            selected_candidate = st.selectbox(
+                "Filter by participant",
+                candidate_options,
+                index=0,
+                key="weekday_bubble_candidate",
+            )
         if df_month is None or df_month.empty:
             st.caption("No workout data for the selected month.")
         else:
+            filtered = df_month if selected_candidate == "All" else df_month[df_month["name"] == selected_candidate]
             try:
-                dates = pd.to_datetime(df_month["workout_date"])
+                dates = pd.to_datetime(filtered["workout_date"])
             except Exception:
-                dates = df_month["workout_date"]
+                dates = filtered["workout_date"]
 
             wd = (
                 dates.dt.day_name().rename("Weekday").to_frame().assign(count=1)
             )
-            counts = wd.groupby("Weekday")["count"].sum().reset_index()
 
             weekday_order = [
                 "Monday",
@@ -204,6 +215,13 @@ def render(*, lb, df_month) -> None:
                 "Saturday",
                 "Sunday",
             ]
+            counts = (
+                wd.groupby("Weekday")["count"]
+                .sum()
+                .reindex(weekday_order, fill_value=0)
+                .rename_axis("Weekday")
+                .reset_index()
+            )
             counts["Weekday"] = pd.Categorical(counts["Weekday"], categories=weekday_order, ordered=True)
             counts = counts.sort_values("Weekday")
 

@@ -7,20 +7,19 @@ WORKOUT_FORM_URL = (
 
 
 def render():
-    st.markdown("## 🏋️ Log your workout")
+    st.markdown("## Log your workout")
 
     st.markdown(
         """
-        Great job showing up today 👏  
-        Whether it was a heavy lift, a quick run, or just getting some movement in —
-        **it all counts**.
+        Great job showing up today.
+        Whether it was a heavy lift, a quick run, or just getting some movement in - it all counts.
 
         Logging your workout helps:
-        - Keep your streak alive 🔥  
-        - Track consistency over the month 📈  
-        - Stay accountable to yourself (and the group 😉)
+        - Keep your streak alive
+        - Track consistency over the month
+        - Stay accountable to yourself (and the group)
 
-        Don’t overthink it — just log it and move on with your day.
+        Do not overthink it - just log it and move on with your day.
         """
     )
 
@@ -49,7 +48,7 @@ def render():
           .cta-wrap {{ text-align: center; margin: 10px 0 18px 0; }}
         </style>
         <div class="cta-wrap">
-          <a class="cta-btn" href="{WORKOUT_FORM_URL}" target="_blank" rel="noopener noreferrer">🚀 Log my workout now</a>
+          <a class="cta-btn" href="{WORKOUT_FORM_URL}" target="_blank" rel="noopener noreferrer">Log my workout now</a>
         </div>
         """,
         unsafe_allow_html=True,
@@ -59,9 +58,10 @@ def render():
 
     st.markdown(
         """
-        <div class="small-muted">
-        Takes less than a minute. Your future self will thank you.
+        <div class="small-muted" style="text-align: center;">
+          Takes less than a minute. Your future self will thank you.
         </div>
         """,
         unsafe_allow_html=True,
     )
+

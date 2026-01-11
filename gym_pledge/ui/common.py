@@ -89,7 +89,7 @@ def render_seaborn_line(data, x: str, y: str, title: str, xlabel: str, ylabel: s
     return fig
 
 
-def alt_weekday_bubble(counts: pd.DataFrame, weekday_order: list[str], color: str = "#4fa3ff", height: int = 260, size_range: tuple[int, int] = (600, 6500)):
+def alt_weekday_bubble(counts: pd.DataFrame, weekday_order: list[str], color: str = "#4fa3ff", height: int = 260, size_range: tuple[int, int] = (300, 10000)):
     """Return an Altair bubble chart for weekday counts.
 
     Expects `counts` to have columns ['Weekday', 'count'] and uses `weekday_order`
@@ -125,7 +125,7 @@ def alt_weekday_bubble(counts: pd.DataFrame, weekday_order: list[str], color: st
         text=alt.Text("count:Q"),
     )
 
-    names = base.mark_text(dy=56, color="#ffffff", fontSize=13, fontWeight=700).encode(
+    names = base.mark_text(dy=72, color="#ffffff", fontSize=13, fontWeight=700).encode(
         x=alt.X("Weekday:N", sort=weekday_order),
         y=alt.value(center_y),
         text=alt.Text("Weekday:N"),

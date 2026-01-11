@@ -228,7 +228,7 @@ def render(*, df, df_month, month_str: str) -> None:
 
     # ---------------- RIGHT: Person detail ----------------
     with right:
-        st.subheader("Workouts left (by person)")
+        # st.subheader("Workouts left (by person)")
 
         people = sorted(lb[name_col].dropna().unique().tolist())
         if not people:
