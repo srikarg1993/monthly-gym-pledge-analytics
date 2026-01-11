@@ -1,18 +1,9 @@
-import calendar
 from datetime import date
-import numpy as np
-import pandas as pd
 import streamlit as st
 
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-import seaborn as sns
-
-import gspread
-from google.oauth2.service_account import Credentials
-from config.globals import *
-from data.source import *
-from data.metrics import *
+from config.globals import WINNER_CUTOFF, USERS
+from data.source import get_data
+from data.metrics import month_leaderboard
 from ui.leaderboard import render as render_leaderboard
 from ui.scorecard import render as render_scorecard
 from ui.personalization import render as render_personalization
@@ -43,6 +34,45 @@ def load_css(rel_path: str):
 
 load_css("styles/theme.css")
 
+
+def inject_sidebar_autocollapse() -> None:
+    st.markdown(
+        """
+        <script>
+        (function() {
+          const parentDoc = window.parent.document;
+          const MOBILE_WIDTH = 768;
+
+          function collapseSidebarIfMobile() {
+            if (window.innerWidth > MOBILE_WIDTH) return;
+            const collapseButton = parentDoc.querySelector('button[title="Collapse sidebar"]') ||
+              parentDoc.querySelector('[data-testid="collapsedControl"]');
+            if (collapseButton) collapseButton.click();
+          }
+
+          function attachHandlers() {
+            const sidebar = parentDoc.querySelector('section[data-testid="stSidebar"]');
+            if (!sidebar) return;
+            const buttons = sidebar.querySelectorAll('button');
+            buttons.forEach((btn) => {
+              if (btn.dataset.sidebarAutocollapse) return;
+              btn.dataset.sidebarAutocollapse = '1';
+              btn.addEventListener('click', () => {
+                setTimeout(collapseSidebarIfMobile, 50);
+              });
+            });
+          }
+
+          attachHandlers();
+          const observer = new MutationObserver(() => attachHandlers());
+          observer.observe(parentDoc.body, { childList: true, subtree: true });
+        })();
+        </script>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def current_month_str() -> str:
     t = date.today()
     return f"{t.year:04d}-{t.month:02d}"
@@ -69,6 +99,8 @@ with st.sidebar:
     dedupe = True
 
 
+inject_sidebar_autocollapse()
+
 # =========================================================
 # Get data
 # =========================================================
@@ -82,18 +114,32 @@ if not months:
 cur = current_month_str()
 default_idx = months.index(cur) if cur in months else (len(months) - 1)
 
-st.write("")
-st.write("")
-st.markdown("# Monthly Pledge to Fitness ")
+header_cols = st.columns([1, 0.28], gap="large")
+with header_cols[0]:
+    st.markdown("# Monthly Pledge to Fitness ")
+with header_cols[1]:
+    
+    # Hide month selector on pages where it isn't needed (Leaderboard and Log Your Workout)
+    current_tab = st.session_state.get("tab", "")
+    if ("Log Your Workout" not in current_tab) and (current_tab != "Leaderboard"):
+        st.markdown("<div style='white-space:nowrap; font-size:18px; font-weight:600'>Month</div>", unsafe_allow_html=True)
+        month_selected = st.selectbox("", months, index=default_idx, label_visibility="collapsed")
+    else:
+        month_selected = months[default_idx]
+
 st.markdown("<hr>", unsafe_allow_html=True)
-top = st.columns([1.2, 1.2, 1.1, 1.0], gap="medium")
-with top[0]:
-    month_selected = st.selectbox("Month", months, index=default_idx)
 
-lb = month_leaderboard(df, month_selected, WINNER_CUTOFF, USERS)
+# Choose leaderboard month: always use current month for the Leaderboard tab
+tab = st.session_state.get("tab", "Leaderboard")
+if tab == "Leaderboard":
+    lb_month = current_month_str()
+else:
+    lb_month = month_selected
+
+lb = month_leaderboard(df, lb_month, WINNER_CUTOFF, USERS)
+# df_month represents the selected month for other pages (Scorecard etc.)
 df_month = df[(df["month"] == month_selected) & (df["workout_date"].notna())].copy()
-
-tab = st.session_state["tab"]
+df_month_leaderboard = df[(df["month"] == lb_month) & (df["workout_date"].notna())].copy()
 
 
 # =========================================================
@@ -101,7 +147,7 @@ tab = st.session_state["tab"]
 # =========================================================
 
 if tab == "Leaderboard":
-    render_leaderboard(df = lb)
+    render_leaderboard(df = lb, df_month = df_month_leaderboard, month_str = lb_month)
 elif tab == "Scorecard":
     render_scorecard(lb = lb, df_month = df_month)
 elif tab == "Personalization":

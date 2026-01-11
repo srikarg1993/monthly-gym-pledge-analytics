@@ -1,17 +1,21 @@
 import pandas as pd
-import matplotlib.pyplot as plt
+import streamlit as st
 
-from config.globals import *
-from data.source import *
-from data.metrics import *
-from ui.common import *
+from config.globals import WINNER_CUTOFF
+from data.metrics import (
+    longest_streak,
+    fastest_winner_date,
+    lazy_logger_score,
+    frontload_vs_cram,
+)
+from ui.common import render_styled_table, alt_weekday_bubble, render_card_start, render_card_end
 import altair as alt
 
 
 def render(*, lb, df_month) -> None:
-    st.markdown("<hr>", unsafe_allow_html=True)
+    # st.markdown("<hr>", unsafe_allow_html=True)
 
-    winner_df = lb[lb["rank"] == 2].reset_index(drop=True)
+    winner_df = lb[lb["rank"] <= 4].reset_index(drop=True)
 
     streak_rows = []
     for name, g in df_month[df_month["burnt_250"]].groupby("name"):
@@ -34,70 +38,129 @@ def render(*, lb, df_month) -> None:
     consistent_not_qual = lb[(~lb["is_winner"]) & (lb["workout_days"] >= WINNER_CUTOFF)].copy()
     consistent_not_qual = consistent_not_qual.rename(columns={"name":"Name","qualifying_days":"Qualifying Days","workouts_left":"Workouts Left","workout_days":"Workout Days"})
 
-    st.markdown("### Winners!! ")
-    st.markdown("Congratulations guys!! You have spent atleast 4000 + calories in this month.")
-    for _, row in winner_df.iterrows():
-        winner_class = "winner" if row["is_winner"] else ""
+    st.markdown("### This month's winners!! ")
+    st.markdown("Congratulations guys!! You burnt 4000 + calories this month.")
 
-        st.markdown(
-            f"""
-            <div class="lb-row {winner_class}">
-            <div class="lb-rank">🏆</div>
-            <div class="lb-name">{row['name']}</div>
-            <div class="lb-workouts">{row['qualifying_days']} workouts</div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+    def _chunks(df, n):
+        for i in range(0, len(df), n):
+            yield df.iloc[i:i + n]
+
+    # use shared helper from ui.common: render_styled_table
+
+    # Render winners as tiles in rows of 4 columns
+    if winner_df.empty:
+        st.caption("No winners yet.")
+    else:
+        for chunk in _chunks(winner_df, 4):
+            cols = st.columns(4, gap="large")
+            for i, (_, row) in enumerate(chunk.iterrows()):
+                with cols[i]:
+                    st.markdown(
+                        f"""
+                        <div style="border-radius:8px; padding:12px; text-align:center; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
+                          <div style="font-size:60px">🏆</div>
+                          <div style="font-weight:600; margin-top:6px">{row['name']}</div>
+                          <div style="color:#666;">{int(row['qualifying_days'])} workouts</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+    # Big-picture group summary stats
+    total_participants = int(lb["name"].nunique()) if "name" in lb.columns else int(len(lb))
+    total_winners = int(lb.get("is_winner", pd.Series(dtype=int)).sum()) if not lb.empty else 0
+    total_workouts = int(lb.get("workout_days", pd.Series(dtype=int)).sum()) if not lb.empty else 0
+    total_calories = int(((lb.get("qualifying_days", 0) * 250) + ((lb.get("workout_days", 0) - lb.get("qualifying_days", 0)) * 150)).sum()) if not lb.empty else 0
+    
+    ### Group Summary Stats ###
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown("### Highlights of our group pledge this month:")
+
+    stat_cols = st.columns(4, gap="small")
+    stats = [
+        ("Total Participants", f"{total_participants}"),
+        ("Total Winners", f"{total_winners}"),
+        ("Total Workouts", f"{total_workouts}"),
+        ("Approx Calories Burned", f"{total_calories:,} Cal"),
+    ]
+
+    for c, (label, value) in zip(stat_cols, stats):
+        with c:
+            st.markdown(
+                f"""
+                <div style='background: rgba(255,255,255,0.02); padding:14px; border-radius:8px; text-align:center;'>
+                  <div style='font-size:20px; font-weight:700; color:#fff;'>{value}</div>
+                  <div style='font-size:12px; color:#9aa0ab; margin-top:6px;'>{label}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+    # Summary table with all participants
+    summary_table = lb.copy()
+    summary_table["Q/W%"] = (summary_table["qualifying_days"] / summary_table["workout_days"] * 100).round(1)
+    summary_table = summary_table[["name", "workout_days", "qualifying_days", "Q/W%"]].sort_values("name")
+    summary_table = summary_table.rename(columns={
+        "name": "Participant",
+        "workout_days": "# of Workouts [W]",
+        "qualifying_days": "# of Qualifying Workouts [Q]"
+    })
+    
     st.markdown("<hr>", unsafe_allow_html=True)
 
-    a, b, c = st.columns(3, gap="large")
+    # Month summary in a card-like container (matches other small cards)
+    with st.container(key="month_summary"):
+        # render_card_start(title="Monthly Summary")
+        st.markdown("### Monthly Individual Summary")
+        render_styled_table(summary_table)
+        render_card_end()
+        
+    st.markdown("<hr>", unsafe_allow_html=True)
+    a, b, c = st.columns(3, gap="small")
 
     with a:
-        with st.container( key="longest_streak"):
-            
+        with st.container(key="longest_streak"):
             st.markdown("### Longest streak")
-
+            st.markdown("Day after day - Streak still alive")
             if not streak_df.empty:
                 top = streak_df.iloc[0]
                 st.markdown(f"**Leader:** {top['Name']} — **{int(top['Longest Streak'])} days**")
-                st.dataframe(streak_df.head(12), hide_index=True, use_container_width=True)
+                render_styled_table(streak_df.head(12))
             else:
                 st.caption("No qualifying streaks yet.")
 
     with b:
-        with st.container( key="fastest_winner"):
+        with st.container(key="fastest_winner"):
             st.markdown("### Fastest winner")
+            st.markdown("Wrapped it up while others were still planning !!")
             if not fw_df.empty:
                 top = fw_df.iloc[0]
                 st.markdown(f"**Fastest:** {top['Name']} — cutoff on **{top['Hit cutoff on']}**")
-                st.dataframe(fw_df.head(12), hide_index=True, use_container_width=True)
+                render_styled_table(fw_df.head(12))
             else:
                 st.caption("No winners yet (or not enough qualifying days).")
 
     with c:
-        with st.container( key="lazy_logger"):
-            st.markdown("### Lazy logger")
+        with st.container(key="lazy_logger"):
+            st.markdown("### Lazy logger ;)")
+            st.markdown("Trained like a beast - Logged like a sloth")
             if lazy_df is not None and not lazy_df.empty:
                 lazy_show = lazy_df.rename(columns={"name":"Name", "avg_log_delay_days":"Avg. Log Delay (Days)"})
+                lazy_show["Avg. Log Delay (Days)"] = lazy_show["Avg. Log Delay (Days)"].round(2)
                 st.markdown(f"**Most delayed:** {lazy_show.iloc[0]['Name']} — avg **{lazy_show.iloc[0]['Avg. Log Delay (Days)']:.2f} days**")
-                st.dataframe(lazy_show.head(12), hide_index=True, use_container_width=True)
+                render_styled_table(lazy_show.head(12))
             else:
                 st.caption("Need timestamps to score logging delay.")
 
     st.markdown("<hr>", unsafe_allow_html=True)
-    left, right = st.columns([1.2, 1.0], gap="large")
+    left, right = st.columns([1.2, 1.0], gap="small")
 
     with left:
         with st.container( key="front_loading"):
-            st.markdown("### Front-loading vs cramming")
+            st.markdown("### Brick by Brick vs All-Nighters")
+            st.markdown("Tracks how effort was distributed across the month, from steady builds to final-week bursts.")
             if not fl.empty:
-                st.dataframe(
-                    fl.rename(columns={"name":"Name","first_half":"First half","second_half":"Second half","style":"Style"}),
-                    hide_index=True,
-                    use_container_width=True
-                )
-                
+                render_styled_table(fl.rename(columns={"name":"Name","first_half":"First half","second_half":"Second half","style":"Style"}))
+
                 counts = (
                     fl["style"]
                     .dropna()
@@ -106,41 +169,43 @@ def render(*, lb, df_month) -> None:
                     .reset_index(name="People")
                 )
 
-                chart = (
-                    alt.Chart(counts)
-                    .mark_bar(
-                        size=28,
-                        cornerRadiusTopLeft=6,
-                        cornerRadiusTopRight=6,
-                    )
-                    .encode(
-                        x=alt.X(
-                            "Style:N",
-                            sort="-y",
-                            title="Style",
-                            axis=alt.Axis(labelAngle=0),
-                        ),
-                        y=alt.Y(
-                            "People:Q",
-                            title="People",
-                            scale=alt.Scale(nice=True),
-                        ),
-                        tooltip=["Style:N", "People:Q"],
-                    )
-                    .properties(
-                        height=260,
-                    )
-                )
-
-                st.markdown("### Distribution of styles")
-                st.altair_chart(chart, use_container_width=True)
-            else:
-                st.caption("Not enough data.")
-
     with right:
         with st.container( key="barely_missed"):
-            st.markdown("### Barely missed & consistent-but-not-qualifying")
-            st.caption("Barely missed = cutoff-2 or cutoff-1 qualifying days (not a winner).")
-            st.dataframe(barely_missed[["Name","Qualifying Days","Workouts Left","Workout Days"]], hide_index=True, use_container_width=True)
-            st.caption("Consistent but not qualifying = workout days ≥ cutoff but qualifying < cutoff.")
-            st.dataframe(consistent_not_qual[["Name","Qualifying Days","Workouts Left","Workout Days"]], hide_index=True, use_container_width=True)
+            st.markdown("### Missed by a hair")
+            st.caption("Legends who missed the qualifying cutoff by 1 or 2 days.")
+            render_styled_table(barely_missed[["Name","Qualifying Days","Workouts Left","Workout Days"]])
+            st.markdown("### Building the Habit")    
+            st.caption("Strong consistency this month — qualifying days are the next unlock.")
+            render_styled_table(consistent_not_qual[["Name","Qualifying Days","Workouts Left","Workout Days"]])
+
+    # Bubble plot: workouts by weekday (delegated to helper)
+    with st.container(key="weekday_bubble"):
+        st.markdown("### Workouts by Day of the Week")
+        st.caption("Each bubble shows total workouts logged on that weekday (all workouts, not only qualifying).")
+        if df_month is None or df_month.empty:
+            st.caption("No workout data for the selected month.")
+        else:
+            try:
+                dates = pd.to_datetime(df_month["workout_date"])
+            except Exception:
+                dates = df_month["workout_date"]
+
+            wd = (
+                dates.dt.day_name().rename("Weekday").to_frame().assign(count=1)
+            )
+            counts = wd.groupby("Weekday")["count"].sum().reset_index()
+
+            weekday_order = [
+                "Monday",
+                "Tuesday",
+                "Wednesday",
+                "Thursday",
+                "Friday",
+                "Saturday",
+                "Sunday",
+            ]
+            counts["Weekday"] = pd.Categorical(counts["Weekday"], categories=weekday_order, ordered=True)
+            counts = counts.sort_values("Weekday")
+
+            chart = alt_weekday_bubble(counts=counts, weekday_order=weekday_order)
+            st.altair_chart(chart, use_container_width=True)
