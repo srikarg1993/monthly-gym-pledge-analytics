@@ -31,6 +31,45 @@ def load_css(file_path: str):
 
 load_css("styles/theme.css")
 
+
+def inject_sidebar_autocollapse() -> None:
+    st.markdown(
+        """
+        <script>
+        (function() {
+          const parentDoc = window.parent.document;
+          const MOBILE_WIDTH = 768;
+
+          function collapseSidebarIfMobile() {
+            if (window.innerWidth > MOBILE_WIDTH) return;
+            const collapseButton = parentDoc.querySelector('button[title="Collapse sidebar"]') ||
+              parentDoc.querySelector('[data-testid="collapsedControl"]');
+            if (collapseButton) collapseButton.click();
+          }
+
+          function attachHandlers() {
+            const sidebar = parentDoc.querySelector('section[data-testid="stSidebar"]');
+            if (!sidebar) return;
+            const buttons = sidebar.querySelectorAll('button');
+            buttons.forEach((btn) => {
+              if (btn.dataset.sidebarAutocollapse) return;
+              btn.dataset.sidebarAutocollapse = '1';
+              btn.addEventListener('click', () => {
+                setTimeout(collapseSidebarIfMobile, 50);
+              });
+            });
+          }
+
+          attachHandlers();
+          const observer = new MutationObserver(() => attachHandlers());
+          observer.observe(parentDoc.body, { childList: true, subtree: true });
+        })();
+        </script>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def current_month_str() -> str:
     t = date.today()
     return f"{t.year:04d}-{t.month:02d}"
@@ -56,6 +95,8 @@ with st.sidebar:
 
     dedupe = True
 
+
+inject_sidebar_autocollapse()
 
 # =========================================================
 # Get data

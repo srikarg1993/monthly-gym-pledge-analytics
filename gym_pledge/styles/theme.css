@@ -343,9 +343,15 @@ div[class*=" st-key-"] {
 }
 
 .stToolbarActionButtonIcon {
-  display: none;
+  display: inline-flex;
 }
 
 .stAppHeader {
-  display: none;
+  display: block;
+}
+
+button[title="Open sidebar"],
+button[title="Collapse sidebar"],
+[data-testid="collapsedControl"] {
+  display: inline-flex !important;
 }
