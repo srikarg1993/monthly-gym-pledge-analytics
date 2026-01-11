@@ -95,6 +95,7 @@ else:
 lb = month_leaderboard(df, lb_month, WINNER_CUTOFF, USERS)
 # df_month represents the selected month for other pages (Scorecard etc.)
 df_month = df[(df["month"] == month_selected) & (df["workout_date"].notna())].copy()
+df_month_leaderboard = df[(df["month"] == lb_month) & (df["workout_date"].notna())].copy()
 
 
 # =========================================================
@@ -102,7 +103,7 @@ df_month = df[(df["month"] == month_selected) & (df["workout_date"].notna())].co
 # =========================================================
 
 if tab == "Leaderboard":
-    render_leaderboard(df = lb)
+    render_leaderboard(df = lb, df_month = df_month_leaderboard, month_str = lb_month)
 elif tab == "Scorecard":
     render_scorecard(lb = lb, df_month = df_month)
 elif tab == "Personalization":

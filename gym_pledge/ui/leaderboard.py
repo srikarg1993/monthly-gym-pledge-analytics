@@ -4,9 +4,12 @@ Provides functions to render the live leaderboard and person-level
 details used by the main `dashboard` app.
 """
 
-import matplotlib.pyplot as plt
-import streamlit as st
+import calendar
 from datetime import datetime
+
+import matplotlib.pyplot as plt
+import pandas as pd
+import streamlit as st
 
 
 from config.globals import WINNER_CUTOFF
@@ -115,7 +118,101 @@ def _donut_days_left(completed: int, cutoff: int) -> None:
         st.info("Keep going!")
 
 
-def render(*, df) -> None:
+def _month_year_from_str(month_str: str) -> tuple[int, int]:
+    try:
+        year_str, month_str = month_str.split("-")
+        return int(year_str), int(month_str)
+    except Exception:
+        today = datetime.now().date()
+        return today.year, today.month
+
+
+def _status_by_day(df_month: pd.DataFrame, name: str) -> dict[int, str]:
+    day_status: dict[int, str] = {}
+    if df_month is None or df_month.empty:
+        return day_status
+
+    person = df_month[df_month["name"] == name]
+    if person.empty:
+        return day_status
+
+    for _, row in person.iterrows():
+        workout_date = row.get("workout_date")
+        if pd.isna(workout_date):
+            continue
+        day = int(workout_date.day)
+        if bool(row.get("burnt_250", False)):
+            day_status[day] = "qualifying"
+        else:
+            day_status.setdefault(day, "regular")
+    return day_status
+
+
+def _render_workout_calendar(*, df_month: pd.DataFrame, name: str, month_str: str) -> None:
+    st.markdown("#### Workout calendar")
+
+    year, month = _month_year_from_str(month_str)
+    today = datetime.now().date()
+    last_day_in_month = calendar.monthrange(year, month)[1]
+    if (year, month) < (today.year, today.month):
+        last_day_for_dots = last_day_in_month
+    elif (year, month) > (today.year, today.month):
+        last_day_for_dots = 0
+    else:
+        last_day_for_dots = today.day
+    status_by_day = _status_by_day(df_month, name)
+
+    st.markdown(
+        """
+        <div class="calendar-legend">
+          <span class="legend-item"><span class="legend-swatch legend-qualifying"></span>Qualifying</span>
+          <span class="legend-item"><span class="legend-swatch legend-regular"></span>Workout</span>
+          <span class="legend-item"><span class="legend-dot legend-missed"></span>Missed day</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    weeks = calendar.Calendar(firstweekday=0).monthdayscalendar(year, month)
+
+    parts = ["<div class='calendar'><div class='calendar-grid'>"]
+    for wd in weekdays:
+        parts.append(f"<div class='cal-head'>{wd}</div>")
+
+    for week in weeks:
+        for day in week:
+            if day == 0:
+                parts.append("<div class='cal-cell cal-empty'></div>")
+                continue
+
+            status = status_by_day.get(day, "none")
+            if status == "none" and day > last_day_for_dots:
+                status = "future"
+            day_class = "cal-day"
+            dot_class = "cal-dot cal-dot-none"
+            if status == "qualifying":
+                day_class += " cal-day-qualifying"
+                dot_class = "cal-dot cal-dot-hidden"
+            elif status == "regular":
+                day_class += " cal-day-regular"
+                dot_class = "cal-dot cal-dot-hidden"
+            elif status == "future":
+                day_class += " cal-day-future"
+                dot_class = "cal-dot cal-dot-hidden"
+
+            parts.append(
+                f"<div class='cal-cell'>"
+                f"<div class='{day_class}'>{day}</div>"
+                f"<div class='{dot_class}'></div>"
+                f"</div>"
+            )
+
+    parts.append("</div></div>")
+    st.markdown("".join(parts), unsafe_allow_html=True)
+
+
+def render(*, df, df_month, month_str: str) -> None:
     lb = df.copy()
     name_col = _name_col(lb)
 
@@ -155,6 +252,9 @@ def render(*, df) -> None:
 
         fig, remaining = render_donut_days_left(completed=qdays, cutoff=WINNER_CUTOFF)
         st.pyplot(fig, transparent=True)
+
+        _render_workout_calendar(df_month=df_month, name=who, month_str=month_str)
+        st.markdown("<div class='calendar-spacer'></div>", unsafe_allow_html=True)
 
         if remaining == 0:
             st.success("Winner locked 🏆")
