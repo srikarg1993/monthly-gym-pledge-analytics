@@ -1,7 +1,11 @@
-streamlit
 pandas
 numpy
+matplotlib
+streamlit
+python-dateutil
 gspread
 google-auth
-matplotlib
+seaborn
+google-auth-oauthlib
+google-auth-httplib2
 pytest
