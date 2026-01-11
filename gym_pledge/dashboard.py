@@ -8,6 +8,7 @@ from ui.leaderboard import render as render_leaderboard
 from ui.scorecard import render as render_scorecard
 from ui.personalization import render as render_personalization
 from ui.monthovermonth import render as render_monthovermonth
+from ui.about import render as render_about
 from ui.logyourworkout import render as render_logyourworkout
 
 
@@ -82,10 +83,12 @@ if "tab" not in st.session_state:
 
 
 with st.sidebar:
+    if st.button("About us", use_container_width=True):
+        st.session_state["tab"] = "About us"
     if st.button("Leaderboard", use_container_width=True):
         st.session_state["tab"] = "Leaderboard"
-    if st.button("Scorecard", use_container_width=True):
-        st.session_state["tab"] = "Scorecard"
+    # if st.button("Scorecard", use_container_width=True):
+    #     st.session_state["tab"] = "Scorecard"
     # if st.button("Personalization", use_container_width=True):
     #     st.session_state["tab"] = "Personalization"
     # if st.button("Month-over-month Trends", use_container_width=True):
@@ -118,7 +121,11 @@ with header_cols[1]:
     
     # Hide month selector on pages where it isn't needed (Leaderboard and Log Your Workout)
     current_tab = st.session_state.get("tab", "")
-    if ("Log Your Workout" not in current_tab) and (current_tab != "Leaderboard"):
+    if (
+        ("Log Your Workout" not in current_tab)
+        and (current_tab != "Leaderboard")
+        and (current_tab != "About us")
+    ):
         st.markdown("<div style='white-space:nowrap; font-size:18px; font-weight:600'>Month</div>", unsafe_allow_html=True)
         month_selected = st.selectbox("", months, index=default_idx, label_visibility="collapsed")
     else:
@@ -151,6 +158,8 @@ elif tab == "Personalization":
     render_personalization( df_month = df_month)
 elif tab == "Month-over-month Trends":
     render_monthovermonth( df = df)
+elif tab == "About us":
+    render_about()
 else :
     render_logyourworkout()
 
