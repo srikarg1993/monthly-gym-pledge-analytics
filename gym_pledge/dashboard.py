@@ -90,8 +90,8 @@ with st.sidebar:
         st.session_state["tab"] = "About us"
     if st.button("Leaderboard", use_container_width=True):
         st.session_state["tab"] = "Leaderboard"
-    # if st.button("Scorecard", use_container_width=True):
-    #     st.session_state["tab"] = "Scorecard"
+    if st.button("Scorecard", use_container_width=True):
+        st.session_state["tab"] = "Scorecard"
     # if st.button("Personalization", use_container_width=True):
     #     st.session_state["tab"] = "Personalization"
     # if st.button("Month-over-month Trends", use_container_width=True):

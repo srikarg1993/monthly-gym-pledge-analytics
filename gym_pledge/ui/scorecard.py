@@ -14,8 +14,9 @@ import altair as alt
 
 def render(*, lb, df_month) -> None:
     # st.markdown("<hr>", unsafe_allow_html=True)
+    winner_df = lb[lb["is_winner"]].copy()
 
-    winner_df = lb[lb["rank"] <= 4].reset_index(drop=True)
+    # winner_df = lb[lb["rank"] <= 4].reset_index(drop=True)
 
     streak_rows = []
     for name, g in df_month[df_month["burnt_250"]].groupby("name"):
@@ -39,7 +40,7 @@ def render(*, lb, df_month) -> None:
     consistent_not_qual = consistent_not_qual.rename(columns={"name":"Name","qualifying_days":"Qualifying Days","workouts_left":"Workouts Left","workout_days":"Workout Days"})
 
     st.markdown("### This month's winners!! ")
-    st.markdown("Congratulations guys!! You burnt 4000 + calories this month.")
+    st.markdown("Congratulations guys!! Each one of you burnt 4000 + calories this month.")
 
     def _chunks(df, n):
         for i in range(0, len(df), n):

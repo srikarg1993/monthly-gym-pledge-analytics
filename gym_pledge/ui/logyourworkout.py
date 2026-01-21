@@ -12,7 +12,7 @@ WORKOUT_FORM_EMBED_URL = (
 )
 
 FORM_EMBED_WIDTH = 900
-FORM_EMBED_HEIGHT = 2000
+FORM_EMBED_HEIGHT = 1000
 
 
 def render():
@@ -41,13 +41,5 @@ def render():
         scrolling=False,
     )
 
-    st.write("")  # spacing
+    # st.write("")  # spacing
 
-    st.markdown(
-        """
-        <div class="small-muted" style="text-align: center;">
-          Takes less than a minute. Your future self will thank you.
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
