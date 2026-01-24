@@ -2,7 +2,6 @@ pandas
 numpy
 matplotlib
 streamlit
-altair<5
 python-dateutil
 gspread
 google-auth
@@ -10,4 +9,3 @@ seaborn
 google-auth-oauthlib
 google-auth-httplib2
 pytest
-standard-imghdr
