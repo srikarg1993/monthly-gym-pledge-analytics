@@ -1,10 +1,20 @@
 """Data source helpers: reading and cleaning raw sheet data."""
 
+from datetime import datetime
+from typing import List, Optional
+
 import pandas as pd
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
-from config.globals import SCOPES, SPREADSHEET_ID, WORKSHEET_NAME
+from config.globals import (
+    SCOPES,
+    SPREADSHEET_ID,
+    WORKSHEET_NAME,
+    USERS_WORKSHEET_NAME,
+    USERS_NAME_COLUMN,
+    USERS_STATUS_IN_VALUE,
+)
 
 
 def read_google_sheet_as_df(spreadsheet_id: str, worksheet_name: str) -> pd.DataFrame:
@@ -22,6 +32,48 @@ def read_google_sheet_as_df(spreadsheet_id: str, worksheet_name: str) -> pd.Data
     df = pd.DataFrame(rows, columns=headers)
     df = df.replace("", pd.NA).dropna(how="all")
     return df
+
+
+def _month_label(month_str: str) -> str:
+    try:
+        dt = datetime.strptime(month_str, "%Y-%m")
+    except ValueError:
+        return ""
+    return dt.strftime("%B %Y")
+
+
+def get_users(month_str: Optional[str] = None) -> Optional[List[str]]:
+    try:
+        users_df = read_google_sheet_as_df(SPREADSHEET_ID, USERS_WORKSHEET_NAME)
+    except Exception as e:
+        st.warning("Could not read Users sheet. Check the sheet name and sharing permissions.")
+        st.exception(e)
+        return None
+
+    if users_df.empty:
+        st.warning("Users sheet is empty.")
+        return None
+
+    if USERS_NAME_COLUMN not in users_df.columns:
+        st.warning(f"Users sheet missing column: '{USERS_NAME_COLUMN}'.")
+        return None
+
+    if month_str:
+        month_label = _month_label(month_str)
+        if month_label and month_label in users_df.columns:
+            in_value = USERS_STATUS_IN_VALUE.strip().lower()
+            status = users_df[month_label].astype(str).str.strip().str.lower()
+            users_df = users_df[status == in_value]
+
+    names = users_df[USERS_NAME_COLUMN].astype(str).str.strip()
+    names = names.replace("", pd.NA).dropna().drop_duplicates()
+
+    users = names.tolist()
+    if not users:
+        st.warning("No users found in Users sheet after filtering.")
+        return None
+    return users
+
 
 def normalize_bool(x) -> bool:
     if pd.isna(x):

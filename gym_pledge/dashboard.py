@@ -1,8 +1,8 @@
 from datetime import date
 import streamlit as st
 
-from config.globals import WINNER_CUTOFF, USERS
-from data.source import get_data
+from config.globals import WINNER_CUTOFF
+from data.source import get_data, get_users
 from data.metrics import month_leaderboard
 from ui.leaderboard import render as render_leaderboard
 from ui.scorecard import render as render_scorecard
@@ -143,7 +143,8 @@ if tab == "Leaderboard":
 else:
     lb_month = month_selected
 
-lb = month_leaderboard(df, lb_month, WINNER_CUTOFF, USERS)
+users = get_users(lb_month)
+lb = month_leaderboard(df, lb_month, WINNER_CUTOFF, users or None)
 # df_month represents the selected month for other pages (Scorecard etc.)
 df_month = df[(df["month"] == month_selected) & (df["workout_date"].notna())].copy()
 df_month_leaderboard = df[(df["month"] == lb_month) & (df["workout_date"].notna())].copy()
