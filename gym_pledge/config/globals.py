@@ -1,17 +1,3 @@
-USERS = {
-    "Naveen Ganta",
-    "Eshwar",
-    "Srikar Gunisetty",
-    "Sandesh Ghanta",
-    "Surya Chaitanya",
-    "Vennela Chava",
-    "Pradyumna Ch.",
-    "Srivatsav Gunisetty",
-    "Divya Maddala",
-    "Gayathri Ravipati",
-    "Jahnavi"
-}
-
 # =========================================================
 # Google Sheets auth (from notebook)
 # =========================================================
@@ -23,6 +9,13 @@ SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets.readonly",
     "https://www.googleapis.com/auth/drive.readonly",
 ]
+
+# =========================================================
+# Users sheet (names)
+# =========================================================
+USERS_WORKSHEET_NAME = "Venmo Tracker"
+USERS_NAME_COLUMN = "Participant"
+USERS_STATUS_IN_VALUE = "In"
 
 
 WINNER_CUTOFF = 16
