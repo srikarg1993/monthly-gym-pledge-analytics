@@ -340,6 +340,7 @@ div[class*=" st-key-"] {
   padding: 18px;
   box-shadow: 0 14px 38px rgba(0,0,0,0.5);
   margin-bottom: 18px;
+  overflow-x: scroll;
 }
 
 .stToolbarActionButtonIcon {
