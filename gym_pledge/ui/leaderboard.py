@@ -223,7 +223,7 @@ def render(*, df, df_month, month_str: str) -> None:
         st.subheader("Live Leaderboard")
         _render_kpis(lb, name_col, month_str)
 
-        max_workouts = WINNER_CUTOFF  # use constant instead of hardcoding 16
+        max_workouts = WINNER_CUTOFF  
         _render_leaderboard_rows(lb, name_col=name_col, max_workouts=max_workouts)
 
     # ---------------- RIGHT: Person detail ----------------
