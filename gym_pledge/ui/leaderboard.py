@@ -5,13 +5,13 @@ details used by the main `dashboard` app.
 """
 
 import calendar
-from datetime import datetime
 
 import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 
 
+from app_time import month_label, today_app
 from config.globals import WINNER_CUTOFF
 from ui.common import render_donut_days_left
 
@@ -21,11 +21,11 @@ def _name_col(df):
     return "name" if "name" in df.columns else "Name"
 
 
-def _render_kpis(lb, name_col: str) -> None:
+def _render_kpis(lb, name_col: str, month_str: str) -> None:
     winners = lb[lb["is_winner"]]
     total_people = int(lb[name_col].nunique())
     winner_count = int(winners[name_col].nunique())
-    month_year = datetime.now().strftime("%b %Y")
+    month_year = month_label(month_str)
 
     st.markdown(
         f"""
@@ -123,7 +123,7 @@ def _month_year_from_str(month_str: str) -> tuple[int, int]:
         year_str, month_str = month_str.split("-")
         return int(year_str), int(month_str)
     except Exception:
-        today = datetime.now().date()
+        today = today_app()
         return today.year, today.month
 
 
@@ -152,7 +152,7 @@ def _render_workout_calendar(*, df_month: pd.DataFrame, name: str, month_str: st
     st.markdown("#### Workout calendar")
 
     year, month = _month_year_from_str(month_str)
-    today = datetime.now().date()
+    today = today_app()
     last_day_in_month = calendar.monthrange(year, month)[1]
     if (year, month) < (today.year, today.month):
         last_day_for_dots = last_day_in_month
@@ -221,7 +221,7 @@ def render(*, df, df_month, month_str: str) -> None:
     # ---------------- LEFT: Leaderboard ----------------
     with left:
         st.subheader("Live Leaderboard")
-        _render_kpis(lb, name_col)
+        _render_kpis(lb, name_col, month_str)
 
         max_workouts = WINNER_CUTOFF  # use constant instead of hardcoding 16
         _render_leaderboard_rows(lb, name_col=name_col, max_workouts=max_workouts)

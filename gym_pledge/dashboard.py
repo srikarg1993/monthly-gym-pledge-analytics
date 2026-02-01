@@ -1,6 +1,6 @@
-from datetime import date
 import streamlit as st
 
+from app_time import current_month_str
 from config.globals import WINNER_CUTOFF
 from data.source import get_data, get_users
 from data.metrics import month_leaderboard
@@ -73,10 +73,6 @@ def inject_sidebar_autocollapse() -> None:
         unsafe_allow_html=True,
     )
 
-
-def current_month_str() -> str:
-    t = date.today()
-    return f"{t.year:04d}-{t.month:02d}"
 
 # =========================================================
 # Sidebar navigation (buttons, no emojis)
