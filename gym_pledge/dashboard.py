@@ -90,8 +90,8 @@ with st.sidebar:
         st.session_state["tab"] = "Scorecard"
     # if st.button("Personalization", use_container_width=True):
     #     st.session_state["tab"] = "Personalization"
-    # if st.button("Month-over-month Trends", use_container_width=True):
-    #     st.session_state["tab"] = "Month-over-month Trends"
+    if st.button("Month-over-month Trends", use_container_width=True):
+        st.session_state["tab"] = "Month-over-month Trends"
     if st.button("Log Your Workout", use_container_width=True):
         st.session_state["tab"] = "Log Your Workout!"
 
@@ -124,6 +124,7 @@ with header_cols[1]:
         ("Log Your Workout" not in current_tab)
         and (current_tab != "Leaderboard")
         and (current_tab != "About us")
+        and (current_tab != "Month-over-month Trends")
     ):
         st.markdown("<div style='white-space:nowrap; font-size:18px; font-weight:600'>Month</div>", unsafe_allow_html=True)
         month_selected = st.selectbox("", months, index=default_idx, label_visibility="collapsed")
