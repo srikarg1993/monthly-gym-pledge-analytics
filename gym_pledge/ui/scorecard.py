@@ -114,7 +114,7 @@ def render(*, lb, df_month) -> None:
         st.markdown("### Monthly Individual Summary")
         render_styled_table(summary_table)
         render_card_end()
-        
+
     st.markdown("<hr>", unsafe_allow_html=True)
     a, b, c = st.columns(3, gap="small")
 
