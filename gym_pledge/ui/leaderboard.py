@@ -5,6 +5,7 @@ details used by the main `dashboard` app.
 """
 
 import calendar
+from html import escape
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -49,33 +50,51 @@ def _render_kpis(lb, name_col: str, month_str: str) -> None:
     st.write("")
 
 
-def _render_leaderboard_rows(lb, *, name_col: str, max_workouts: int) -> None:
-    st.markdown("<div class='leaderboard'>", unsafe_allow_html=True)
+def _render_leaderboard_rows(lb, *, name_col: str, cutoff: int) -> None:
+    if lb.empty:
+        st.info("No leaderboard entries for this month yet.")
+        return
 
-    for _, row in lb.iterrows():
-        qdays = int(row.get("qualifying_days", 0))
-        progress = int((qdays / max_workouts) * 100) if max_workouts else 0
-        progress = max(0, min(progress, 100))
-
-        winner_class = "winner" if bool(row.get("is_winner", False)) else ""
-        rank = row.get("rank", "")
-        name = row.get(name_col, "")
-
-        st.markdown(
-            f"""
-            <div class="lb-row {winner_class}">
-              <div class="lb-rank">#{rank}</div>
-              <div class="lb-name">{name}</div>
-              <div class="lb-workouts">{qdays} workouts</div>
-              <div class="lb-bar-wrap">
-                <div class="lb-bar" style="width:{progress}%"></div>
-              </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
+    ranked = lb.copy()
+    if "rank" not in ranked.columns:
+        ranked["rank"] = (
+            ranked["qualifying_days"].rank(method="dense", ascending=False).astype(int)
         )
 
-    st.markdown("</div>", unsafe_allow_html=True)
+    ranked = ranked.sort_values(["rank", "qualifying_days", name_col], ascending=[True, False, True])
+
+    parts = ["<div class='leaderboard leaderboard-groups'>"]
+
+    for rank, group in ranked.groupby("rank", sort=True):
+        rank_value = int(rank)
+        people_count = int(len(group))
+        participant_text = "participant" if people_count == 1 else "participants"
+
+        parts.append(
+            f"<div class='lb-rank-group'>"
+            f"<div class='lb-rank-header'>"
+            f"<span>Rank #{rank_value}</span>"
+            f"<span>{people_count} {participant_text}</span>"
+            f"</div>"
+            f"<div class='lb-cards-grid'>"
+        )
+
+        for _, row in group.iterrows():
+            qdays = int(row.get("qualifying_days", 0))
+            winner_class = "winner" if bool(row.get("is_winner", False)) else ""
+            name = escape(str(row.get(name_col, "")))
+
+            parts.append(
+                f"<div class='lb-card {winner_class}'>"
+                f"<div class='lb-card-name'>{name}</div>"
+                f"<div class='lb-card-progress'>{qdays} out of {cutoff} workouts completed.</div>"
+                f"</div>"
+            )
+
+        parts.append("</div></div>")
+
+    parts.append("</div>")
+    st.markdown("".join(parts), unsafe_allow_html=True)
 
 
 def _donut_days_left(completed: int, cutoff: int) -> None:
@@ -223,8 +242,7 @@ def render(*, df, df_month, month_str: str) -> None:
         st.subheader("Live Leaderboard")
         _render_kpis(lb, name_col, month_str)
 
-        max_workouts = WINNER_CUTOFF  
-        _render_leaderboard_rows(lb, name_col=name_col, max_workouts=max_workouts)
+        _render_leaderboard_rows(lb, name_col=name_col, cutoff=WINNER_CUTOFF)
 
     # ---------------- RIGHT: Person detail ----------------
     with right:
