@@ -7,14 +7,12 @@ details used by the main `dashboard` app.
 import calendar
 from html import escape
 
-import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 
 
 from app_time import month_label, today_app
 from config.globals import WINNER_CUTOFF
-from ui.common import render_donut_days_left
 
 
 def _name_col(df):
@@ -50,10 +48,14 @@ def _render_kpis(lb, name_col: str, month_str: str) -> None:
     st.write("")
 
 
-def _render_leaderboard_rows(lb, *, name_col: str, cutoff: int) -> None:
+def _safe_key(text: str) -> str:
+    return "".join(ch.lower() if ch.isalnum() else "_" for ch in text).strip("_")
+
+
+def _render_leaderboard_rows(lb, *, name_col: str, cutoff: int, active_name: str) -> str:
     if lb.empty:
         st.info("No leaderboard entries for this month yet.")
-        return
+        return active_name
 
     ranked = lb.copy()
     if "rank" not in ranked.columns:
@@ -63,78 +65,62 @@ def _render_leaderboard_rows(lb, *, name_col: str, cutoff: int) -> None:
 
     ranked = ranked.sort_values(["rank", "qualifying_days", name_col], ascending=[True, False, True])
 
-    parts = ["<div class='leaderboard leaderboard-groups'>"]
-
+    card_meta: list[tuple[str, bool, str]] = []
     for rank, group in ranked.groupby("rank", sort=True):
         rank_value = int(rank)
         people_count = int(len(group))
         participant_text = "participant" if people_count == 1 else "participants"
 
-        parts.append(
-            f"<div class='lb-rank-group'>"
-            f"<div class='lb-rank-header'>"
-            f"<span>Rank #{rank_value}</span>"
-            f"<span>{people_count} {participant_text}</span>"
-            f"</div>"
-            f"<div class='lb-cards-grid'>"
-        )
-
-        for _, row in group.iterrows():
-            qdays = int(row.get("qualifying_days", 0))
-            winner_class = "winner" if bool(row.get("is_winner", False)) else ""
-            name = escape(str(row.get(name_col, "")))
-
-            parts.append(
-                f"<div class='lb-card {winner_class}'>"
-                f"<div class='lb-card-name'>{name}</div>"
-                f"<div class='lb-card-progress'>{qdays} out of {cutoff} workouts completed.</div>"
-                f"</div>"
+        with st.container(key=f"lb_rank_{rank_value}"):
+            st.markdown(
+                f"<div class='lb-rank-header'>"
+                f"<span>Rank #{rank_value}</span>"
+                f"<span>{people_count} {participant_text}</span>"
+                f"</div>",
+                unsafe_allow_html=True,
             )
 
-        parts.append("</div></div>")
+            rows = group.to_dict("records")
+            for row_start in range(0, len(rows), 3):
+                cols = st.columns(3, gap="small")
+                for col_idx, row in enumerate(rows[row_start : row_start + 3]):
+                    col = cols[col_idx]
+                    with col:
+                        raw_name = str(row.get(name_col, ""))
+                        qdays = int(row.get("qualifying_days", 0))
+                        winner = bool(row.get("is_winner", False))
+                        key = f"lb_pick_{rank_value}_{row_start + col_idx}_{_safe_key(raw_name)}"
+                        label = f"**{escape(raw_name)}**  \n{qdays} out of {cutoff} workouts completed."
 
-    parts.append("</div>")
-    st.markdown("".join(parts), unsafe_allow_html=True)
+                        if st.button(label, key=key, use_container_width=True):
+                            active_name = raw_name
 
+                        card_meta.append((key, winner, raw_name))
 
-def _donut_days_left(completed: int, cutoff: int) -> None:
-    remaining = max(cutoff - completed, 0)
+    style_rules: list[str] = []
+    for key, winner, raw_name in card_meta:
+        selector = f"div[class*='st-key-{key}'] button"
+        if winner and raw_name == active_name:
+            style_rules.append(
+                f"{selector}{{border-color:rgba(16,185,129,0.85)!important;"
+                f"box-shadow:0 0 0 1px rgba(16,185,129,0.4) inset!important;"
+                f"background:rgba(16,185,129,0.14)!important;}}"
+            )
+        elif winner:
+            style_rules.append(
+                f"{selector}{{border-color:rgba(16,185,129,0.65)!important;"
+                f"background:rgba(16,185,129,0.14)!important;}}"
+            )
+        elif raw_name == active_name:
+            style_rules.append(
+                f"{selector}{{border-color:rgba(99,102,241,0.8)!important;"
+                f"box-shadow:0 0 0 1px rgba(99,102,241,0.35) inset!important;}}"
+            )
 
-    fig, ax = plt.subplots()
-    ax.pie(
-        [completed, remaining],
-        startangle=90,
-        counterclock=False,
-        wedgeprops=dict(width=0.2, edgecolor="none"),
-    )
+    if style_rules:
+        st.markdown(f"<style>{''.join(style_rules)}</style>", unsafe_allow_html=True)
 
-    ax.text(
-        0,
-        0.05,
-        f"{remaining}",
-        ha="center",
-        va="center",
-        fontsize=30,
-        fontweight="800",
-        color="#E4E6EB",
-    )
-    ax.text(
-        0,
-        -0.18,
-        "days left",
-        ha="center",
-        va="center",
-        fontsize=15,
-        color="#A0A4B3",
-    )
-    ax.axis("equal")
-
-    st.pyplot(fig, transparent=True)
-
-    if remaining == 0:
-        st.success("Winner locked 🏆")
-    else:
-        st.info("Keep going!")
+    return active_name
 
 
 def _month_year_from_str(month_str: str) -> tuple[int, int]:
@@ -234,6 +220,15 @@ def _render_workout_calendar(*, df_month: pd.DataFrame, name: str, month_str: st
 def render(*, df, df_month, month_str: str) -> None:
     lb = df.copy()
     name_col = _name_col(lb)
+    people = sorted(lb[name_col].dropna().astype(str).unique().tolist())
+    if not people:
+        st.warning("No participants found.")
+        return
+
+    state_key = "leaderboard_active_person"
+    if st.session_state.get(state_key) not in people:
+        st.session_state[state_key] = people[0]
+    active_person = str(st.session_state[state_key])
 
     left, right = st.columns([1.9, 1.0], gap="large")
 
@@ -241,40 +236,35 @@ def render(*, df, df_month, month_str: str) -> None:
     with left:
         st.subheader("Live Leaderboard")
         _render_kpis(lb, name_col, month_str)
-
-        _render_leaderboard_rows(lb, name_col=name_col, cutoff=WINNER_CUTOFF)
+        st.caption("Click a participant card to view their workout calendar.")
+        active_person = _render_leaderboard_rows(
+            lb,
+            name_col=name_col,
+            cutoff=WINNER_CUTOFF,
+            active_name=active_person,
+        )
+        st.session_state[state_key] = active_person
 
     # ---------------- RIGHT: Person detail ----------------
     with right:
-        # st.subheader("Workouts left (by person)")
-
-        people = sorted(lb[name_col].dropna().unique().tolist())
-        if not people:
-            st.warning("No participants found.")
-            return
-
-        who = st.selectbox("Select person", people)
-
-        selected = lb[lb[name_col] == who]
+        selected = lb[lb[name_col].astype(str) == active_person]
         if selected.empty:
             st.warning("No data found for selected person.")
             return
 
         row = selected.iloc[0]
         qdays = int(row.get("qualifying_days", 0))
-        # wdays = int(row.get("workout_days", 0))         # keep if you use it
-        # workouts_left = int(row.get("workouts_left", 0)) # keep if you use it
+        remaining = max(WINNER_CUTOFF - qdays, 0)
 
-        st.markdown(f"### {who}")
-        st.markdown("<div class='small-muted'>This month</div>", unsafe_allow_html=True)
-
-        fig, remaining = render_donut_days_left(completed=qdays, cutoff=WINNER_CUTOFF)
-        st.pyplot(fig, transparent=True)
-
-        _render_workout_calendar(df_month=df_month, name=who, month_str=month_str)
+        st.markdown(f"### {active_person}")
+        st.markdown(
+            f"<div class='small-muted'>{qdays} out of {WINNER_CUTOFF} workouts completed.</div>",
+            unsafe_allow_html=True,
+        )
+        _render_workout_calendar(df_month=df_month, name=active_person, month_str=month_str)
         st.markdown("<div class='calendar-spacer'></div>", unsafe_allow_html=True)
 
         if remaining == 0:
-            st.success("Winner locked 🏆")
+            st.success("Winner locked")
         else:
             st.info("Keep going!")
