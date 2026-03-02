@@ -19,3 +19,18 @@ USERS_STATUS_IN_VALUE = "In"
 
 
 WINNER_CUTOFF = 16
+
+# Optional per-month cutoff overrides (YYYY-MM).
+# Keep WINNER_CUTOFF as the default for months not listed here.
+WINNER_CUTOFF_BY_MONTH = {
+    "2026-02": 15,
+}
+
+
+def winner_cutoff_for_month(month_str) -> int:
+    """Resolve winner cutoff for a month string like YYYY-MM."""
+    cutoff = WINNER_CUTOFF_BY_MONTH.get(str(month_str), WINNER_CUTOFF)
+    try:
+        return max(int(cutoff), 1)
+    except (TypeError, ValueError):
+        return WINNER_CUTOFF

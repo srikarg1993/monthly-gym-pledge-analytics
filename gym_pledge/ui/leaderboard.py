@@ -12,7 +12,6 @@ import streamlit as st
 
 
 from app_time import month_label, today_app
-from config.globals import WINNER_CUTOFF
 
 
 def _name_col(df):
@@ -229,7 +228,7 @@ def _render_workout_calendar(*, df_month: pd.DataFrame, name: str, month_str: st
     st.markdown("".join(parts), unsafe_allow_html=True)
 
 
-def render(*, df, df_month, month_str: str) -> None:
+def render(*, df, df_month, month_str: str, cutoff: int) -> None:
     lb = df.copy()
     name_col = _name_col(lb)
     people = sorted(lb[name_col].dropna().astype(str).unique().tolist())
@@ -252,7 +251,7 @@ def render(*, df, df_month, month_str: str) -> None:
         active_person = _render_leaderboard_rows(
             lb,
             name_col=name_col,
-            cutoff=WINNER_CUTOFF,
+            cutoff=cutoff,
             active_name=active_person,
         )
         st.session_state[state_key] = active_person
@@ -266,11 +265,11 @@ def render(*, df, df_month, month_str: str) -> None:
 
         row = selected.iloc[0]
         qdays = int(row.get("qualifying_days", 0))
-        remaining = max(WINNER_CUTOFF - qdays, 0)
+        remaining = max(cutoff - qdays, 0)
 
         st.markdown(f"### {active_person}")
         st.markdown(
-            f"<div class='small-muted'>{qdays} out of {WINNER_CUTOFF} workouts completed.</div>",
+            f"<div class='small-muted'>{qdays} out of {cutoff} workouts completed.</div>",
             unsafe_allow_html=True,
         )
         _render_workout_calendar(df_month=df_month, name=active_person, month_str=month_str)
