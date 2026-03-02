@@ -52,6 +52,14 @@ def _safe_key(text: str) -> str:
     return "".join(ch.lower() if ch.isalnum() else "_" for ch in text).strip("_")
 
 
+def _progress_ratio(current: int, total: int) -> float:
+    if total <= 0:
+        return 0.0
+
+    bounded_current = max(0, min(current, total))
+    return bounded_current / total
+
+
 def _render_leaderboard_rows(lb, *, name_col: str, cutoff: int, active_name: str) -> str:
     if lb.empty:
         st.info("No leaderboard entries for this month yet.")
@@ -65,7 +73,7 @@ def _render_leaderboard_rows(lb, *, name_col: str, cutoff: int, active_name: str
 
     ranked = ranked.sort_values(["rank", "qualifying_days", name_col], ascending=[True, False, True])
 
-    card_meta: list[tuple[str, bool, str]] = []
+    card_meta: list[tuple[str, bool, str, float]] = []
     for rank, group in ranked.groupby("rank", sort=True):
         rank_value = int(rank)
         people_count = int(len(group))
@@ -89,27 +97,31 @@ def _render_leaderboard_rows(lb, *, name_col: str, cutoff: int, active_name: str
                         raw_name = str(row.get(name_col, ""))
                         qdays = int(row.get("qualifying_days", 0))
                         winner = bool(row.get("is_winner", False))
+                        progress = _progress_ratio(qdays, cutoff)
                         key = f"lb_pick_{rank_value}_{row_start + col_idx}_{_safe_key(raw_name)}"
-                        label = f"**{escape(raw_name)}**  \n{qdays} out of {cutoff} workouts completed."
+                        label = f"**{escape(raw_name)}**  \n{qdays}/{cutoff}"
 
                         if st.button(label, key=key, use_container_width=True):
                             active_name = raw_name
 
-                        card_meta.append((key, winner, raw_name))
+                        card_meta.append((key, winner, raw_name, progress))
 
     style_rules: list[str] = []
-    for key, winner, raw_name in card_meta:
+    for key, winner, raw_name, progress in card_meta:
         selector = f"div[class*='st-key-{key}'] button"
+        style_rules.append(f"{selector}{{--lb-progress:{progress:.4f};}}")
         if winner and raw_name == active_name:
             style_rules.append(
                 f"{selector}{{border-color:rgba(16,185,129,0.85)!important;"
                 f"box-shadow:0 0 0 1px rgba(16,185,129,0.4) inset!important;"
-                f"background:rgba(16,185,129,0.14)!important;}}"
+                f"background:rgba(16,185,129,0.14)!important;"
+                f"--lb-progress-fill:linear-gradient(90deg,rgba(16,185,129,0.95),rgba(52,211,153,0.95));}}"
             )
         elif winner:
             style_rules.append(
                 f"{selector}{{border-color:rgba(16,185,129,0.65)!important;"
-                f"background:rgba(16,185,129,0.14)!important;}}"
+                f"background:rgba(16,185,129,0.14)!important;"
+                f"--lb-progress-fill:linear-gradient(90deg,rgba(16,185,129,0.95),rgba(52,211,153,0.95));}}"
             )
         elif raw_name == active_name:
             style_rules.append(
