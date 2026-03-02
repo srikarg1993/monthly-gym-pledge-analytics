@@ -1,7 +1,6 @@
 import pandas as pd
 import streamlit as st
 
-from config.globals import WINNER_CUTOFF
 from data.metrics import (
     longest_streak,
     fastest_winner_date,
@@ -12,7 +11,7 @@ from ui.common import render_styled_table, alt_weekday_bubble, render_card_start
 import altair as alt
 
 
-def render(*, lb, df_month) -> None:
+def render(*, lb, df_month, cutoff: int) -> None:
     # st.markdown("<hr>", unsafe_allow_html=True)
     winner_df = lb[lb["is_winner"]].copy()
 
@@ -25,7 +24,7 @@ def render(*, lb, df_month) -> None:
 
     fw_rows = []
     for name in df_month["name"].dropna().unique():
-        fw = fastest_winner_date(df_month, name, WINNER_CUTOFF)
+        fw = fastest_winner_date(df_month, name, cutoff)
         if fw:
             fw_rows.append({"Name": name, "Hit cutoff on": fw})
     fw_df = pd.DataFrame(fw_rows).sort_values("Hit cutoff on") if fw_rows else pd.DataFrame(columns=["Name","Hit cutoff on"])
@@ -33,10 +32,10 @@ def render(*, lb, df_month) -> None:
     lazy_df = lazy_logger_score(df_month)
     fl = frontload_vs_cram(df_month)
 
-    barely_missed = lb[(~lb["is_winner"]) & (lb["qualifying_days"].isin([WINNER_CUTOFF-2, WINNER_CUTOFF-1]))].copy()
+    barely_missed = lb[(~lb["is_winner"]) & (lb["qualifying_days"].isin([cutoff - 2, cutoff - 1]))].copy()
     barely_missed = barely_missed.rename(columns={"name":"Name","qualifying_days":"Qualifying Days","workouts_left":"Workouts Left","workout_days":"Workout Days"})
 
-    consistent_not_qual = lb[(~lb["is_winner"]) & (lb["workout_days"] >= WINNER_CUTOFF)].copy()
+    consistent_not_qual = lb[(~lb["is_winner"]) & (lb["workout_days"] >= cutoff)].copy()
     consistent_not_qual = consistent_not_qual.rename(columns={"name":"Name","qualifying_days":"Qualifying Days","workouts_left":"Workouts Left","workout_days":"Workout Days"})
 
     st.markdown("### This month's winners!! ")

@@ -9,7 +9,7 @@ import pandas as pd
 import streamlit as st
 
 from app_time import current_month_str
-from config.globals import WINNER_CUTOFF
+from config.globals import winner_cutoff_for_month
 from data.metrics import month_leaderboard
 from data.source import get_users
 from ui.common import render_card_start, render_card_end, render_styled_table
@@ -75,8 +75,8 @@ def _build_leaderboard_comparison_table(df: pd.DataFrame, last_month: str, curre
     users_last = get_users(last_month)
     users_current = get_users(current_month)
 
-    lb_last = month_leaderboard(df, last_month, WINNER_CUTOFF, users_last or None)
-    lb_current = month_leaderboard(df, current_month, WINNER_CUTOFF, users_current or None)
+    lb_last = month_leaderboard(df, last_month, winner_cutoff_for_month(last_month), users_last or None)
+    lb_current = month_leaderboard(df, current_month, winner_cutoff_for_month(current_month), users_current or None)
 
     names = sorted(set(lb_last.get("name", [])) | set(lb_current.get("name", [])))
     if not names:
@@ -108,8 +108,10 @@ def _build_participation_table(per_person: pd.DataFrame, months: list[str]) -> p
             ]
         )
 
+    with_cutoff = per_person.copy()
+    with_cutoff["winner_cutoff"] = with_cutoff["month"].map(winner_cutoff_for_month).astype(int)
     winners_by_month = (
-        per_person[per_person["qualifying_days"] >= WINNER_CUTOFF]
+        with_cutoff[with_cutoff["qualifying_days"] >= with_cutoff["winner_cutoff"]]
         .groupby("month")["name"]
         .nunique()
     )

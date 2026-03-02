@@ -1,7 +1,7 @@
 import streamlit as st
 
 from app_time import current_month_str
-from config.globals import WINNER_CUTOFF
+from config.globals import winner_cutoff_for_month
 from data.source import get_data, get_users
 from data.metrics import month_leaderboard
 from ui.leaderboard import render as render_leaderboard
@@ -145,7 +145,8 @@ else:
     lb_month = month_selected
 
 users = get_users(lb_month)
-lb = month_leaderboard(df, lb_month, WINNER_CUTOFF, users or None)
+lb_cutoff = winner_cutoff_for_month(lb_month)
+lb = month_leaderboard(df, lb_month, lb_cutoff, users or None)
 # df_month represents the selected month for other pages (Scorecard etc.)
 df_month = df[(df["month"] == month_selected) & (df["workout_date"].notna())].copy()
 df_month_leaderboard = df[(df["month"] == lb_month) & (df["workout_date"].notna())].copy()
@@ -156,9 +157,9 @@ df_month_leaderboard = df[(df["month"] == lb_month) & (df["workout_date"].notna(
 # =========================================================
 
 if tab == "Leaderboard":
-    render_leaderboard(df = lb, df_month = df_month_leaderboard, month_str = lb_month)
+    render_leaderboard(df = lb, df_month = df_month_leaderboard, month_str = lb_month, cutoff = lb_cutoff)
 elif tab == "Scorecard":
-    render_scorecard(lb = lb, df_month = df_month)
+    render_scorecard(lb = lb, df_month = df_month, cutoff = lb_cutoff)
 elif tab == "Personalization":
     render_personalization( df_month = df_month)
 elif tab == "Fitness Yearbook":
