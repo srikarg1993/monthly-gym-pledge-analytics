@@ -29,6 +29,7 @@ def _df_for_month():
                 date(2024, 1, 3),
             ],
             "burnt_250": [True, True, False, True, True],
+            "calories_burned": [300, 300, 100, 400, 350],
             "month": ["2024-01"] * 5,
         }
     )
@@ -123,3 +124,30 @@ def test_month_bounds():
     start, end = month_bounds("2024-02")
     assert start == date(2024, 2, 1)
     assert end == date(2024, 2, 29)
+
+
+def test_month_leaderboard_total_calories():
+    df = _df_for_month()
+    out = month_leaderboard(df, "2024-01", cutoff=2, all_users=["Ann", "Bob", "Cara"])
+
+    ann = out[out["name"] == "Ann"].iloc[0]
+    bob = out[out["name"] == "Bob"].iloc[0]
+    cara = out[out["name"] == "Cara"].iloc[0]
+
+    assert ann["total_calories"] == 700   # 300 + 300 + 100
+    assert bob["total_calories"] == 750   # 400 + 350
+    assert cara["total_calories"] == 0
+
+
+def test_month_leaderboard_without_calories_column():
+    df = pd.DataFrame(
+        {
+            "name": ["Ann", "Bob"],
+            "workout_date": [date(2024, 1, 1), date(2024, 1, 1)],
+            "burnt_250": [True, True],
+            "month": ["2024-01"] * 2,
+        }
+    )
+    out = month_leaderboard(df, "2024-01", cutoff=1)
+    assert "total_calories" in out.columns
+    assert (out["total_calories"] == 0).all()

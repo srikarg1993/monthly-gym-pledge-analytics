@@ -13,7 +13,6 @@ from ui.common import (
     alt_goal_ladder_chart,
     alt_group_split_chart,
     alt_race_lane_chart,
-    alt_status_bucket_chart,
     alt_streak_heartbeat_chart,
     alt_weekday_cadence_chart,
     alt_delay_runway_chart,
@@ -165,7 +164,41 @@ def _resolve_streak_focus(lb: pd.DataFrame, streak_df: pd.DataFrame) -> str | No
             current_focus = people[0]
         st.session_state[STREAK_KEY] = current_focus
 
-    return st.selectbox("Choose participant", people, index=people.index(current_focus), key=STREAK_KEY)
+    return st.selectbox("Choose participant", people, index=people.index(current_focus), key=STREAK_KEY, label_visibility="collapsed")
+
+
+def _build_all_streaks_df(df_month: pd.DataFrame, exclude_name: str | None = None) -> pd.DataFrame:
+    if df_month is None or df_month.empty:
+        return pd.DataFrame(columns=["Day", "Streak", "Name"])
+
+    month_values = df_month["month"].dropna().astype(str)
+    if month_values.empty:
+        return pd.DataFrame(columns=["Day", "Streak", "Name"])
+
+    month_str = month_values.iloc[0]
+    start, end = month_bounds(month_str)
+    if month_str == current_month_str():
+        end = min(end, today_app())
+
+    names = sorted(df_month["name"].dropna().astype(str).unique().tolist())
+    all_rows = []
+    for name in names:
+        if name == exclude_name:
+            continue
+        qualifying_dates = set(
+            pd.to_datetime(
+                df_month[(df_month["name"].astype(str) == name) & (df_month["burnt_250"])]["workout_date"],
+                errors="coerce",
+            ).dt.date.dropna().tolist()
+        )
+        streak = 0
+        for day in pd.date_range(start=start, end=end, freq="D"):
+            current_day = day.date()
+            qualifying = current_day in qualifying_dates
+            streak = streak + 1 if qualifying else 0
+            all_rows.append({"Day": int(day.day), "Streak": streak, "Name": name})
+
+    return pd.DataFrame(all_rows) if all_rows else pd.DataFrame(columns=["Day", "Streak", "Name"])
 
 
 def _build_streak_wave_df(df_month: pd.DataFrame, focus_name: str) -> pd.DataFrame:
@@ -314,7 +347,6 @@ def _build_weekday_mix_df(df_month: pd.DataFrame) -> pd.DataFrame:
 
 def render(*, lb, df_month, cutoff: int) -> None:
     winner_df = lb[lb["is_winner"]].copy()
-    status_mix = _build_status_mix_df(lb, cutoff)
     progress_df = _build_progress_ladder_df(lb)
     streak_df = _build_streak_df(df_month)
     fastest_df, month_days = _build_fastest_winner_df(df_month, cutoff)
@@ -347,54 +379,42 @@ def render(*, lb, df_month, cutoff: int) -> None:
     total_participants = int(lb["name"].nunique()) if "name" in lb.columns else int(len(lb))
     total_winners = int(lb.get("is_winner", pd.Series(dtype=int)).sum()) if not lb.empty else 0
     total_workouts = int(lb.get("workout_days", pd.Series(dtype=int)).sum()) if not lb.empty else 0
-    total_calories = int(
-        (
-            (lb.get("qualifying_days", 0) * 250)
-            + ((lb.get("workout_days", 0) - lb.get("qualifying_days", 0)) * 150)
-        ).sum()
-    ) if not lb.empty else 0
+    total_calories = int(lb.get("total_calories", pd.Series(dtype=int)).sum()) if not lb.empty else 0
 
     st.markdown("<hr>", unsafe_allow_html=True)
     with st.container(key="pledge_pulse"):
         st.markdown("### Pledge Pulse")
-        st.caption("A quick read on who has already crossed the line, who is close, and who has the habit but not the qualifying days yet.")
 
         stat_cols = st.columns(4, gap="small")
         stats = [
-            ("Total Participants", f"{total_participants}"),
-            ("Total Winners", f"{total_winners}"),
-            ("Total Workouts", f"{total_workouts}"),
-            ("Approx Calories Burned", f"{total_calories:,} Cal"),
+            ("Total Participants", f"{total_participants}", "#6366F1"),
+            ("Total Winners", f"{total_winners}", "#10B981"),
+            ("Total Workouts", f"{total_workouts}", "#3B82F6"),
+            ("Calories Burned", f"{total_calories:,} Cal", "#F59E0B"),
         ]
-        for col, (label, value) in zip(stat_cols, stats):
+        for col, (label, value, accent) in zip(stat_cols, stats):
             with col:
                 st.markdown(
                     f"""
-                    <div style='background: rgba(255,255,255,0.02); padding:16px; border-radius:10px; text-align:center;'>
-                      <div style='font-size:22px; font-weight:700; color:#fff;'>{value}</div>
-                      <div style='font-size:12px; color:#9aa0ab; margin-top:6px;'>{label}</div>
+                    <div style='
+                      background: rgba(28,36,60,0.96);
+                      border: 1px solid rgba(255,255,255,0.12);
+                      padding: 20px 16px;
+                      border-radius: 14px;
+                      text-align: center;
+                      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+                      border-top: 3px solid {accent};
+                    '>
+                      <div style='font-size:26px; font-weight:800; color:#fff; letter-spacing:-0.02em;'>{value}</div>
+                      <div style='font-size:12px; color:#9aa0ab; margin-top:8px; text-transform:uppercase; letter-spacing:0.06em;'>{label}</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
 
-        if not status_mix.empty:
-            st.altair_chart(
-                alt_status_bucket_chart(
-                    status_mix,
-                    category_col="Status",
-                    count_col="People",
-                    share_col="Share",
-                    color_col="Color",
-                    height=220,
-                ),
-                use_container_width=True,
-            )
-
     st.markdown("<hr>", unsafe_allow_html=True)
     with st.container(key="qualifying_progress"):
         st.markdown("### Qualifying Progress Ladder")
-        st.caption("The green bar is qualifying progress, the steel marker is total workout volume, and the dashed goal line shows the month target.")
         if progress_df.empty:
             st.caption("No participant progress to show yet.")
         else:
@@ -412,10 +432,9 @@ def render(*, lb, df_month, cutoff: int) -> None:
 
     st.markdown("<hr>", unsafe_allow_html=True)
     with st.container(key="longest_streak"):
-        title_col, pick_col = st.columns([3.1, 1.1], gap="large")
+        title_col, pick_col = st.columns([5, 2], gap="small", vertical_alignment="center")
         with title_col:
             st.markdown("### Longest Streak")
-            st.caption("Select one participant to watch the qualifying streak rise, break, and restart across the month.")
         with pick_col:
             streak_focus = _resolve_streak_focus(lb, streak_df)
 
@@ -423,15 +442,16 @@ def render(*, lb, df_month, cutoff: int) -> None:
             st.caption("No participants available for streak tracking.")
         else:
             streak_wave_df = _build_streak_wave_df(df_month, streak_focus)
-            leader_note = ""
-            if not streak_df.empty:
-                leader = streak_df.iloc[0]
-                leader_note = f"Group leader: {leader['Name']} with {int(leader['Longest Streak'])} days."
+            bg_streaks = _build_all_streaks_df(df_month, exclude_name=streak_focus)
 
             if streak_wave_df.empty or int(streak_wave_df["Streak"].max()) == 0:
-                st.caption(f"{leader_note} {streak_focus} has not built a qualifying streak yet.".strip())
+                st.caption(f"{streak_focus} has not built a qualifying streak yet.")
             else:
                 focus_peak = int(streak_wave_df["Streak"].max())
+                leader_note = ""
+                if not streak_df.empty:
+                    leader = streak_df.iloc[0]
+                    leader_note = f"Group leader: {leader['Name']} with {int(leader['Longest Streak'])} days."
                 st.markdown(f"**{streak_focus}** peaked at **{focus_peak} days**. {leader_note}".strip())
                 st.altair_chart(
                     alt_streak_heartbeat_chart(
@@ -440,6 +460,8 @@ def render(*, lb, df_month, cutoff: int) -> None:
                         streak_col="Streak",
                         qualifying_col="Qualifying",
                         day_label_col="Day Label",
+                        month_days=month_days,
+                        background_streaks=bg_streaks if not bg_streaks.empty else None,
                         height=360,
                     ),
                     use_container_width=True,

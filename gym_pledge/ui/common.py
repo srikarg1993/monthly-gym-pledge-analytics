@@ -521,6 +521,15 @@ def alt_goal_ladder_chart(
     if df is None or df.empty:
         return alt.Chart(pd.DataFrame())
 
+    BAR_WINNER = "#34D399"
+    BAR_PROGRESS = "#60A5FA"
+    GLOW_WINNER = "rgba(52,211,153,0.15)"
+    GLOW_PROGRESS = "rgba(96,165,250,0.12)"
+    GLOW_TRACK = "rgba(255,255,255,0.05)"
+    MARKER_COLOR = "#A78BFA"
+    GOAL_COLOR = "#F472B6"
+    LABEL_WHITE = "#FFFFFF"
+
     chart_df = df.copy().reset_index(drop=True)
     domain_end = max(float(chart_df[[qualifying_col, workout_col]].max().max()), float(cutoff), 1.0)
     chart_df["_track"] = domain_end
@@ -532,21 +541,38 @@ def alt_goal_ladder_chart(
         + "W"
     )
     chart_df["_label_x"] = chart_df[[qualifying_col, workout_col]].max(axis=1) + 0.25
+    chart_df["_is_winner"] = chart_df[qualifying_col].astype(int) >= cutoff
     y_order = chart_df[label_col].tolist()
-    domain = [0, domain_end + 2.4]
+    domain = [0, domain_end + 3.0]
+    x_tick_count = int(domain_end) + 4
     chart_height = height or alt_chart_height(len(chart_df), min_height=360, max_height=860, row_step=38)
 
     base = alt.Chart(chart_df)
-    track = base.mark_bar(cornerRadiusEnd=10, size=22, opacity=0.18).encode(
+
+    track = base.mark_bar(cornerRadiusEnd=14, size=26, opacity=0.08).encode(
         x=alt.X("_track:Q", title="Days", scale=alt.Scale(domain=domain, nice=False)),
-        y=alt.Y(f"{label_col}:N", sort=y_order, title=None, axis=alt.Axis(labelPadding=10)),
-        color=alt.value(ALT_TRACK),
+        y=alt.Y(f"{label_col}:N", sort=y_order, title=None, axis=alt.Axis(labelPadding=14)),
+        color=alt.value(GLOW_TRACK),
     )
 
-    qualifying = base.mark_bar(cornerRadiusEnd=10, size=14).encode(
+    qualifying_glow = base.mark_bar(cornerRadiusEnd=14, size=30, opacity=0.18).encode(
         x=alt.X(f"{qualifying_col}:Q", scale=alt.Scale(domain=domain, nice=False)),
         y=alt.Y(f"{label_col}:N", sort=y_order),
-        color=alt.value(ALT_SAGE),
+        color=alt.condition(
+            alt.datum._is_winner,
+            alt.value(GLOW_WINNER),
+            alt.value(GLOW_PROGRESS),
+        ),
+    )
+
+    qualifying = base.mark_bar(cornerRadiusEnd=14, size=16).encode(
+        x=alt.X(f"{qualifying_col}:Q", scale=alt.Scale(domain=domain, nice=False)),
+        y=alt.Y(f"{label_col}:N", sort=y_order),
+        color=alt.condition(
+            alt.datum._is_winner,
+            alt.value(BAR_WINNER),
+            alt.value(BAR_PROGRESS),
+        ),
         tooltip=[
             alt.Tooltip(f"{label_col}:N", title="Participant"),
             alt.Tooltip(f"{qualifying_col}:Q", title="Qualifying days"),
@@ -556,29 +582,30 @@ def alt_goal_ladder_chart(
 
     workout_marker = base.mark_point(
         filled=True,
-        size=90,
-        color=ALT_STEEL,
+        size=110,
+        shape="diamond",
         stroke="#0B1220",
-        strokeWidth=1.5,
+        strokeWidth=2,
     ).encode(
         x=alt.X(f"{workout_col}:Q", scale=alt.Scale(domain=domain, nice=False)),
         y=alt.Y(f"{label_col}:N", sort=y_order),
+        color=alt.value(MARKER_COLOR),
     )
 
     cutoff_rule = alt.Chart(pd.DataFrame({"Cutoff": [cutoff]})).mark_rule(
-        color=ALT_COPPER,
-        strokeDash=[4, 4],
-        strokeWidth=2,
+        color=GOAL_COLOR,
+        strokeDash=[6, 4],
+        strokeWidth=2.5,
     ).encode(x=alt.X("Cutoff:Q", scale=alt.Scale(domain=domain, nice=False)))
 
-    cutoff_label = alt.Chart(pd.DataFrame({"Cutoff": [cutoff], "Label": [f"Goal {cutoff}"]})).mark_text(
+    cutoff_label = alt.Chart(pd.DataFrame({"Cutoff": [cutoff], "Label": [f"GOAL {cutoff}"]})).mark_text(
         align="left",
         baseline="top",
         dx=8,
         dy=6,
-        color=ALT_COPPER,
-        fontSize=11,
-        fontWeight=700,
+        color=GOAL_COLOR,
+        fontSize=13,
+        fontWeight=800,
     ).encode(
         x=alt.X("Cutoff:Q", scale=alt.Scale(domain=domain, nice=False)),
         y=alt.value(0),
@@ -588,9 +615,9 @@ def alt_goal_ladder_chart(
     labels = base.mark_text(
         align="left",
         baseline="middle",
-        color=ALT_TEXT,
+        color=LABEL_WHITE,
         dx=10,
-        fontSize=11,
+        fontSize=14,
         fontWeight=700,
     ).encode(
         x=alt.X("_label_x:Q", scale=alt.Scale(domain=domain, nice=False)),
@@ -598,7 +625,32 @@ def alt_goal_ladder_chart(
         text="Summary:N",
     )
 
-    return _configure_altair((track + qualifying + workout_marker + cutoff_rule + cutoff_label + labels).properties(height=chart_height))
+    chart = (track + qualifying_glow + qualifying + workout_marker + cutoff_rule + cutoff_label + labels).properties(height=chart_height)
+
+    return (
+        chart.configure_view(strokeOpacity=0)
+        .configure_axis(
+            labelColor="#FFFFFF",
+            titleColor="#FFFFFF",
+            domainColor="rgba(255,255,255,0.08)",
+            gridColor="rgba(255,255,255,0.04)",
+            tickColor="rgba(255,255,255,0.08)",
+            labelFontSize=14,
+            titleFontSize=14,
+            labelLimit=240,
+        )
+        .configure_axisY(
+            labelFontSize=15,
+            labelColor="#FFFFFF",
+            labelFontWeight="bold",
+        )
+        .configure_axisX(
+            tickMinStep=1,
+            tickCount=x_tick_count,
+            format="d",
+        )
+        .configure_title(color="#FFFFFF", anchor="start")
+    )
 
 
 def alt_streak_heartbeat_chart(
@@ -608,40 +660,113 @@ def alt_streak_heartbeat_chart(
     streak_col: str,
     qualifying_col: str,
     day_label_col: str,
+    month_days: int = 31,
+    background_streaks: pd.DataFrame | None = None,  # deprecated, ignored
     height: int = 340,
 ):
     if df is None or df.empty:
         return alt.Chart(pd.DataFrame())
 
+    STREAK_LINE = "#34D399"
+    STREAK_GLOW = "rgba(52,211,153,0.35)"
+    POINT_ACTIVE = "#34D399"
+    POINT_REST = "rgba(255,255,255,0.35)"
+    LABEL_WHITE = "#FFFFFF"
+
     chart_df = df.copy().reset_index(drop=True)
-    max_day = max(int(chart_df[day_col].max()), 1)
+    max_day = max(int(chart_df[day_col].max()), month_days)
     max_streak = max(int(chart_df[streak_col].max()), 1)
 
+    x_domain = [0.5, max_day + 0.5]
+    y_domain = [0, max_streak + 2]
+
+    layers = []
+
     base = alt.Chart(chart_df)
+
     area = base.mark_area(
-        line={"color": ALT_COPPER, "strokeWidth": 3},
-        color=ALT_COPPER,
-        opacity=0.14,
+        line={"color": STREAK_LINE, "strokeWidth": 3.5},
+        color=alt.Gradient(
+            gradient="linear",
+            stops=[
+                alt.GradientStop(color=STREAK_GLOW, offset=0),
+                alt.GradientStop(color="rgba(52,211,153,0.05)", offset=1),
+            ],
+            x1=0, y1=0, x2=0, y2=1,
+        ),
+        interpolate="monotone",
+        opacity=1.0,
     ).encode(
-        x=alt.X(f"{day_col}:Q", title="Day of month", scale=alt.Scale(domain=[1, max_day], nice=False)),
-        y=alt.Y(f"{streak_col}:Q", title="Live streak", scale=alt.Scale(domain=[0, max_streak + 1], nice=False)),
+        x=alt.X(
+            f"{day_col}:Q",
+            title="Day of Month",
+            scale=alt.Scale(domain=x_domain, nice=False),
+        ),
+        y=alt.Y(
+            f"{streak_col}:Q",
+            title="Streak Length",
+            scale=alt.Scale(domain=y_domain, nice=False),
+        ),
         tooltip=[
             alt.Tooltip(f"{day_label_col}:N", title="Day"),
             alt.Tooltip(f"{streak_col}:Q", title="Streak"),
         ],
     )
+    layers.append(area)
 
-    points = base.transform_filter(alt.datum[qualifying_col]).mark_circle(
-        size=90,
-        color=ALT_SAGE,
-        stroke="#0B1220",
-        strokeWidth=1.5,
+    rest_points = base.transform_filter(~alt.datum[qualifying_col]).mark_circle(
+        size=55,
+        color=POINT_REST,
+        strokeWidth=0,
+        opacity=0.7,
     ).encode(
-        x=alt.X(f"{day_col}:Q", scale=alt.Scale(domain=[1, max_day], nice=False)),
-        y=alt.Y(f"{streak_col}:Q", scale=alt.Scale(domain=[0, max_streak + 1], nice=False)),
+        x=alt.X(f"{day_col}:Q", scale=alt.Scale(domain=x_domain, nice=False)),
+        y=alt.Y(f"{streak_col}:Q", scale=alt.Scale(domain=y_domain, nice=False)),
     )
+    layers.append(rest_points)
 
-    return _configure_altair((area + points).properties(height=height))
+    active_points = base.transform_filter(alt.datum[qualifying_col]).mark_circle(
+        size=160,
+        color=POINT_ACTIVE,
+        stroke="#0B1220",
+        strokeWidth=2,
+        opacity=1.0,
+    ).encode(
+        x=alt.X(f"{day_col}:Q", scale=alt.Scale(domain=x_domain, nice=False)),
+        y=alt.Y(f"{streak_col}:Q", scale=alt.Scale(domain=y_domain, nice=False)),
+        tooltip=[
+            alt.Tooltip(f"{day_label_col}:N", title="Day"),
+            alt.Tooltip(f"{streak_col}:Q", title="Streak"),
+        ],
+    )
+    layers.append(active_points)
+
+    chart = alt.layer(*layers).properties(height=height)
+
+    return (
+        chart.configure_view(strokeOpacity=0)
+        .configure_axis(
+            labelColor=LABEL_WHITE,
+            titleColor=LABEL_WHITE,
+            domainColor="rgba(255,255,255,0.08)",
+            gridColor="rgba(255,255,255,0.06)",
+            tickColor="rgba(255,255,255,0.08)",
+            labelFontSize=14,
+            titleFontSize=14,
+            labelLimit=240,
+        )
+        .configure_axisX(
+            tickMinStep=1,
+            tickCount=max_day,
+            format="d",
+        )
+        .configure_axisY(
+            tickMinStep=1,
+            tickCount=max_streak + 3,
+            format="d",
+        )
+        .configure_title(color=LABEL_WHITE, anchor="start")
+    )
 
 
 def alt_race_lane_chart(

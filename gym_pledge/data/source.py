@@ -14,6 +14,7 @@ from config.globals import (
     USERS_WORKSHEET_NAME,
     USERS_NAME_COLUMN,
     USERS_STATUS_IN_VALUE,
+    MAX_CALORIES,
 )
 
 
@@ -88,6 +89,7 @@ def clean(
     col_name: str = "You are?",
     col_wkdate: str = "Workout date",
     col_250: str = "Burnt >= 250 calories?",
+    col_calories: str = "How many calories did you burn?",
     dedupe: bool = True,
 ) -> pd.DataFrame:
     df = df.copy()
@@ -99,14 +101,18 @@ def clean(
             f"Missing columns: {missing}. Found columns: {list(df.columns)}"
         )
 
-    df = df.rename(
-        columns={
-            col_timestamp: "timestamp",
-            col_name: "name_raw",
-            col_wkdate: "workout_date_raw",
-            col_250: "burnt_250_raw",
-        }
-    )
+    rename_map = {
+        col_timestamp: "timestamp",
+        col_name: "name_raw",
+        col_wkdate: "workout_date_raw",
+        col_250: "burnt_250_raw",
+    }
+
+    has_calories = col_calories in df.columns
+    if has_calories:
+        rename_map[col_calories] = "calories_raw"
+
+    df = df.rename(columns=rename_map)
 
     df["name"] = (
         df["name_raw"].astype(str).str.strip().str.replace(r"\s+", " ", regex=True)
@@ -117,6 +123,19 @@ def clean(
 
     df["workout_date"] = pd.to_datetime(df["workout_date_raw"], errors="coerce").dt.date
     df["burnt_250"] = df["burnt_250_raw"].apply(normalize_bool)
+
+    if has_calories:
+        df["calories_burned"] = pd.to_numeric(df["calories_raw"], errors="coerce")
+        # Only discard rows that had a non-empty, non-blank value which
+        # turned out non-numeric (genuine garbage like "abc").
+        raw_filled = df["calories_raw"].notna() & (df["calories_raw"].astype(str).str.strip() != "")
+        bad_input = raw_filled & df["calories_burned"].isna()
+        df = df[~bad_input].reset_index(drop=True)
+        df = df[df["calories_burned"].isna() | (df["calories_burned"] <= MAX_CALORIES)].reset_index(drop=True)
+        df["calories_met_250"] = df["calories_burned"] >= 250
+    else:
+        df["calories_burned"] = pd.NA
+        df["calories_met_250"] = pd.NA
 
     if dedupe:
         df = (

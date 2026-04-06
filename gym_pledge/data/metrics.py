@@ -16,10 +16,16 @@ def month_leaderboard(df: pd.DataFrame, month_str: str, cutoff: int, all_users=N
     any_days = d.groupby("name")["workout_date"].nunique().rename("workout_days").reset_index()
     qual_days = d[d["burnt_250"]].groupby("name")["workout_date"].nunique().rename("qualifying_days").reset_index()
 
+    if "calories_burned" in d.columns:
+        cal_sum = d.groupby("name")["calories_burned"].sum().rename("total_calories").reset_index()
+    else:
+        cal_sum = pd.DataFrame({"name": d["name"].unique(), "total_calories": 0})
 
-    out = any_days.merge(qual_days, on="name", how="left")
+
+    out = any_days.merge(qual_days, on="name", how="left").merge(cal_sum, on="name", how="left")
     out["qualifying_days"] = out["qualifying_days"].fillna(0).astype(int)
     out["workout_days"] = out["workout_days"].fillna(0).astype(int)
+    out["total_calories"] = out["total_calories"].fillna(0).astype(int)
     
 
     if all_users is not None:
@@ -27,6 +33,7 @@ def month_leaderboard(df: pd.DataFrame, month_str: str, cutoff: int, all_users=N
         out = all_users_df.merge(out, on="name", how="left").fillna(0)
         out["qualifying_days"] = out["qualifying_days"].astype(int)
         out["workout_days"] = out["workout_days"].astype(int)
+        out["total_calories"] = out["total_calories"].astype(int)
 
     out["workouts_left"] = (cutoff - out["qualifying_days"]).clip(lower=0)
     out["is_winner"] = out["qualifying_days"] >= cutoff
