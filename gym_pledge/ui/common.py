@@ -845,116 +845,115 @@ def alt_delay_runway_chart(
     if df is None or df.empty:
         return alt.Chart(pd.DataFrame())
 
+    ZONE_ORDER = ["Same Day", "½–1 day", "2+ days"]
+    ZONE_COLORS = [ALT_SAGE, ALT_COPPER, "#B56B6D"]
+    ZONE_BG = ["#38534A", "#4E4A3E", "#513B3D"]
+
     chart_df = df.copy().reset_index(drop=True)
-    chart_df["_zero"] = 0.0
+    chart_df = chart_df.dropna(subset=[delay_col]).reset_index(drop=True)
+    if chart_df.empty:
+        return alt.Chart(pd.DataFrame())
+    chart_df[delay_col] = chart_df[delay_col].clip(lower=0.0)
     chart_df["Zone"] = pd.cut(
         chart_df[delay_col],
-        bins=[-0.01, 0.5, 2.5, float("inf")],
-        labels=["Same day", "1-2 days", "3+ days"],
+        bins=[-0.01, 0.5, 1.5, float("inf")],
+        labels=ZONE_ORDER,
     ).astype(str)
-    chart_df["Label"] = chart_df[label_value_col].map(lambda value: f"{value:.2f}d")
-    domain_max = max(float(chart_df[delay_col].max()), 3.0)
-    domain = [0, domain_max + 1.4]
-    y_order = chart_df[label_col].tolist()
-    chart_height = height or alt_chart_height(len(chart_df), min_height=300, max_height=760, row_step=34)
+    chart_df["Label"] = chart_df[label_value_col].map(lambda v: f"{v:.2f}d")
+    chart_df["Zone"] = pd.Categorical(chart_df["Zone"], categories=ZONE_ORDER, ordered=True)
+    chart_df = chart_df.sort_values(["Zone", delay_col], ascending=[True, True]).reset_index(drop=True)
+    chart_df["_rank"] = chart_df.groupby("Zone", observed=True).cumcount()
 
-    band_end = domain[1]
-    bands = pd.DataFrame(
-        [
-            {"Zone": "Same day", "x1": 0.0, "x2": min(0.5, band_end), "Color": "#38534A"},
-            {"Zone": "1-2 days", "x1": min(0.5, band_end), "x2": min(2.5, band_end), "Color": "#4E4A3E"},
-            {"Zone": "3+ days", "x1": min(2.5, band_end), "x2": band_end, "Color": "#513B3D"},
-        ]
-    )
-    band_labels = pd.DataFrame(
-        [
-            {"Zone": "Same day", "x": 0.18, "Label": "Same day"},
-            {"Zone": "1-2 days", "x": 1.2, "Label": "1-2 days"},
-            {"Zone": "3+ days", "x": 3.4, "Label": "3+ days"},
-        ]
-    )
+    max_per_zone = max(int(chart_df.groupby("Zone", observed=True).size().max()), 1)
+    chart_height = height or max(340, max_per_zone * 90 + 80)
 
-    background = alt.Chart(bands).mark_rect(opacity=0.18).encode(
-        x=alt.X("x1:Q", scale=alt.Scale(domain=domain, nice=False)),
-        x2="x2:Q",
+    # Background bands
+    bg_df = pd.DataFrame([{"Zone": z, "Color": c} for z, c in zip(ZONE_ORDER, ZONE_BG)])
+    bg_df["Zone"] = pd.Categorical(bg_df["Zone"], categories=ZONE_ORDER, ordered=True)
+    bg_df["y1"] = -0.5
+    bg_df["y2"] = max_per_zone - 0.5
+
+    background = alt.Chart(bg_df).mark_rect(opacity=0.22).encode(
+        x=alt.X("Zone:N", sort=ZONE_ORDER, axis=None),
+        y=alt.Y("y1:Q", scale=alt.Scale(domain=[-0.5, max_per_zone - 0.5], nice=False), axis=None),
+        y2="y2:Q",
         color=alt.Color("Color:N", scale=None, legend=None),
     )
 
-    header = alt.Chart(band_labels).mark_text(
-        baseline="top",
-        color=ALT_MUTED,
+    base = alt.Chart(chart_df)
+
+    tooltip_fields = [
+        alt.Tooltip(f"{label_col}:N", title="Participant"),
+        alt.Tooltip(f"{delay_col}:Q", title="Avg log delay", format=".2f"),
+    ]
+    if size_col is not None:
+        tooltip_fields.append(alt.Tooltip(f"{size_col}:Q", title="Logged workouts"))
+
+    bubble_size = (
+        alt.Size(f"{size_col}:Q", legend=None, scale=alt.Scale(range=[900, 4000]))
+        if size_col is not None
+        else alt.value(2000)
+    )
+
+    bubbles = base.mark_circle(
+        filled=True,
+        stroke="#0B1220",
+        strokeWidth=2,
+        opacity=0.92,
+    ).encode(
+        x=alt.X("Zone:N", sort=ZONE_ORDER, title=None,
+                 axis=alt.Axis(labelAngle=0, labelColor="#FFFFFF", labelFontSize=15, labelFontWeight="bold",
+                               domainOpacity=0, tickOpacity=0)),
+        y=alt.Y("_rank:Q", scale=alt.Scale(domain=[-0.5, max_per_zone - 0.5], nice=False), axis=None,
+                 sort="descending"),
+        size=bubble_size,
+        color=alt.Color(
+            "Zone:N",
+            scale=alt.Scale(domain=ZONE_ORDER, range=ZONE_COLORS),
+            legend=None,
+        ),
+        tooltip=tooltip_fields,
+    )
+
+    name_labels = base.mark_text(
+        color="#FFFFFF",
+        fontSize=13,
+        fontWeight=700,
+        dy=-9,
+    ).encode(
+        x=alt.X("Zone:N", sort=ZONE_ORDER),
+        y=alt.Y("_rank:Q", sort="descending"),
+        text=f"{label_col}:N",
+    )
+
+    delay_labels = base.mark_text(
+        color="rgba(255,255,255,0.7)",
         fontSize=11,
         fontWeight=600,
+        dy=9,
     ).encode(
-        x=alt.X("x:Q", scale=alt.Scale(domain=domain, nice=False)),
-        y=alt.value(0),
+        x=alt.X("Zone:N", sort=ZONE_ORDER),
+        y=alt.Y("_rank:Q", sort="descending"),
         text="Label:N",
     )
 
-    base = alt.Chart(chart_df)
-    stems = base.mark_rule(strokeWidth=2, opacity=0.75).encode(
-        x=alt.X("_zero:Q", title="Avg log delay (days)", scale=alt.Scale(domain=domain, nice=False)),
-        x2=f"{delay_col}:Q",
-        y=alt.Y(f"{label_col}:N", sort=y_order, title=None, axis=alt.Axis(labelPadding=10)),
-        color=alt.value(ALT_STEEL),
-        tooltip=[
-            alt.Tooltip(f"{label_col}:N", title="Participant"),
-            alt.Tooltip(f"{delay_col}:Q", title="Avg log delay", format=".2f"),
-        ],
-    )
-
-    point_kwargs = {
-        "filled": True,
-        "stroke": "#0B1220",
-        "strokeWidth": 1.5,
-    }
-    if size_col is None:
-        points = base.mark_circle(size=120, **point_kwargs).encode(
-            x=alt.X(f"{delay_col}:Q", scale=alt.Scale(domain=domain, nice=False)),
-            y=alt.Y(f"{label_col}:N", sort=y_order),
-            color=alt.Color(
-                "Zone:N",
-                scale=alt.Scale(
-                    domain=["Same day", "1-2 days", "3+ days"],
-                    range=[ALT_SAGE, ALT_COPPER, "#B56B6D"],
-                ),
-                legend=None,
-            ),
+    chart = (background + bubbles + name_labels + delay_labels).properties(height=chart_height)
+    return (
+        chart.configure_view(strokeOpacity=0)
+        .configure_axis(
+            grid=False,
+            domain=False,
+            ticks=False,
+            labels=False,
         )
-    else:
-        points = base.mark_circle(**point_kwargs).encode(
-            x=alt.X(f"{delay_col}:Q", scale=alt.Scale(domain=domain, nice=False)),
-            y=alt.Y(f"{label_col}:N", sort=y_order),
-            size=alt.Size(f"{size_col}:Q", legend=None, scale=alt.Scale(range=[80, 320])),
-            color=alt.Color(
-                "Zone:N",
-                scale=alt.Scale(
-                    domain=["Same day", "1-2 days", "3+ days"],
-                    range=[ALT_SAGE, ALT_COPPER, "#B56B6D"],
-                ),
-                legend=None,
-            ),
-            tooltip=[
-                alt.Tooltip(f"{label_col}:N", title="Participant"),
-                alt.Tooltip(f"{delay_col}:Q", title="Avg log delay", format=".2f"),
-                alt.Tooltip(f"{size_col}:Q", title="Logged workouts"),
-            ],
+        .configure_axisX(
+            labels=True,
+            labelColor="#FFFFFF",
+            labelFontSize=15,
+            labelFontWeight="bold",
         )
-
-    labels = base.mark_text(
-        align="left",
-        baseline="middle",
-        dx=10,
-        color=ALT_TEXT,
-        fontSize=11,
-        fontWeight=700,
-    ).encode(
-        x=alt.X(f"{delay_col}:Q", scale=alt.Scale(domain=domain, nice=False)),
-        y=alt.Y(f"{label_col}:N", sort=y_order),
-        text="Label:N",
+        .configure_title(color="#FFFFFF", anchor="start")
     )
-
-    return _configure_altair((background + header + stems + points + labels).properties(height=chart_height))
 
 
 def alt_group_split_chart(
@@ -1005,8 +1004,8 @@ def alt_group_split_chart(
         align="right",
         baseline="middle",
         dx=-8,
-        color=ALT_TEXT,
-        fontSize=11,
+        color="#FFFFFF",
+        fontSize=14,
         fontWeight=700,
     ).encode(
         x=alt.X("_left_signed:Q", scale=alt.Scale(domain=domain, nice=False)),
@@ -1018,8 +1017,8 @@ def alt_group_split_chart(
         align="left",
         baseline="middle",
         dx=8,
-        color=ALT_TEXT,
-        fontSize=11,
+        color="#FFFFFF",
+        fontSize=14,
         fontWeight=700,
     ).encode(
         x=alt.X(f"{right_col}:Q", scale=alt.Scale(domain=domain, nice=False)),
@@ -1031,8 +1030,8 @@ def alt_group_split_chart(
         align="left",
         baseline="middle",
         dx=10,
-        color=ALT_MUTED,
-        fontSize=11,
+        color="#FFFFFF",
+        fontSize=14,
         fontWeight=600,
     ).encode(
         x=alt.X("_style_label_x:Q", scale=alt.Scale(domain=domain, nice=False)),
@@ -1040,7 +1039,26 @@ def alt_group_split_chart(
         text=f"{style_col}:N",
     )
 
-    return _configure_altair((center + left_bars + right_bars + left_labels + right_labels + style_labels).properties(height=chart_height))
+    chart = (center + left_bars + right_bars + left_labels + right_labels + style_labels).properties(height=chart_height)
+    return (
+        chart.configure_view(strokeOpacity=0)
+        .configure_axis(
+            labelColor="#FFFFFF",
+            titleColor="#FFFFFF",
+            domainColor=ALT_GRID,
+            gridColor=ALT_GRID,
+            tickColor=ALT_GRID,
+            labelFontSize=14,
+            titleFontSize=14,
+            labelLimit=240,
+        )
+        .configure_axisY(
+            labelFontSize=15,
+            labelColor="#FFFFFF",
+            labelFontWeight="bold",
+        )
+        .configure_title(color="#FFFFFF", anchor="start")
+    )
 
 
 def alt_goal_gap_chart(
@@ -1102,8 +1120,8 @@ def alt_goal_gap_chart(
         dx=8,
         dy=6,
         color=ALT_COPPER,
-        fontSize=11,
-        fontWeight=700,
+        fontSize=13,
+        fontWeight=800,
     ).encode(
         x=alt.X("Cutoff:Q", scale=alt.Scale(domain=domain, nice=False)),
         y=alt.value(0),
@@ -1114,8 +1132,8 @@ def alt_goal_gap_chart(
         align="left",
         baseline="middle",
         dx=12,
-        color=ALT_TEXT,
-        fontSize=11,
+        color="#FFFFFF",
+        fontSize=14,
         fontWeight=700,
     ).encode(
         x=alt.X("_label_x:Q", scale=alt.Scale(domain=domain, nice=False)),
@@ -1123,7 +1141,26 @@ def alt_goal_gap_chart(
         text="Gap label:N",
     )
 
-    return _configure_altair((gap_line + point + cutoff_rule + cutoff_label + labels).properties(height=chart_height))
+    chart = (gap_line + point + cutoff_rule + cutoff_label + labels).properties(height=chart_height)
+    return (
+        chart.configure_view(strokeOpacity=0)
+        .configure_axis(
+            labelColor="#FFFFFF",
+            titleColor="#FFFFFF",
+            domainColor=ALT_GRID,
+            gridColor=ALT_GRID,
+            tickColor=ALT_GRID,
+            labelFontSize=14,
+            titleFontSize=14,
+            labelLimit=240,
+        )
+        .configure_axisY(
+            labelFontSize=15,
+            labelColor="#FFFFFF",
+            labelFontWeight="bold",
+        )
+        .configure_title(color="#FFFFFF", anchor="start")
+    )
 
 
 def alt_weekday_cadence_chart(
@@ -1158,8 +1195,8 @@ def alt_weekday_cadence_chart(
 
     labels = base.mark_text(
         dy=-10,
-        color=ALT_TEXT,
-        fontSize=11,
+        color="#FFFFFF",
+        fontSize=14,
         fontWeight=700,
     ).encode(
         x=alt.X(f"{weekday_col}:N", sort=weekday_order),
@@ -1167,7 +1204,26 @@ def alt_weekday_cadence_chart(
         text=alt.Text(f"{total_col}:Q", format=".0f"),
     )
 
-    return _configure_altair((bars + line + labels).properties(height=height))
+    chart = (bars + line + labels).properties(height=height)
+    return (
+        chart.configure_view(strokeOpacity=0)
+        .configure_axis(
+            labelColor="#FFFFFF",
+            titleColor="#FFFFFF",
+            domainColor=ALT_GRID,
+            gridColor=ALT_GRID,
+            tickColor=ALT_GRID,
+            labelFontSize=14,
+            titleFontSize=14,
+            labelLimit=240,
+        )
+        .configure_axisY(
+            labelFontSize=15,
+            labelColor="#FFFFFF",
+            labelFontWeight="bold",
+        )
+        .configure_title(color="#FFFFFF", anchor="start")
+    )
 
 
 def alt_weekday_bubble(counts: pd.DataFrame, weekday_order: list[str], color: str = "#4fa3ff", height: int = 260, size_range: tuple[int, int] = (300, 10000)):

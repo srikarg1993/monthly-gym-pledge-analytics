@@ -491,10 +491,13 @@ def render(*, lb, df_month, cutoff: int) -> None:
     st.markdown("<hr>", unsafe_allow_html=True)
     with st.container(key="lazy_logger"):
         st.markdown("### Lazy Logger")
-        st.caption("Dots farther right mean workouts were logged later on average. The shaded bands split same-day, 1-2 day, and 3+ day logging.")
+        st.caption("Each bubble sits in the zone matching its average logging delay. Bigger bubbles mean more logged workouts.")
         if lazy_df is None or lazy_df.empty:
             st.caption("Need timestamps to score logging delay.")
         else:
+            n = len(lazy_df)
+            max_zone = max(n // 3, 1)
+            chart_h = max(340, min(760, max_zone * 90 + 120))
             st.altair_chart(
                 alt_delay_runway_chart(
                     lazy_df,
@@ -502,7 +505,7 @@ def render(*, lb, df_month, cutoff: int) -> None:
                     delay_col="Avg. Log Delay (Days)",
                     size_col="Logged Workouts",
                     label_value_col="Avg. Log Delay (Days)",
-                    height=max(300, min(760, 70 + len(lazy_df) * 34)),
+                    height=chart_h,
                 ),
                 use_container_width=True,
             )
