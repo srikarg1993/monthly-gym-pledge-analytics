@@ -18,6 +18,7 @@ from config.globals import (
 )
 
 
+@st.cache_data(ttl=60, show_spinner=False)
 def read_google_sheet_as_df(spreadsheet_id: str, worksheet_name: str) -> pd.DataFrame:
     creds = Credentials.from_service_account_info(dict(st.secrets["gcp_service_account"]), scopes=SCOPES)
     gc = gspread.authorize(creds)
@@ -43,6 +44,7 @@ def _month_label(month_str: str) -> str:
     return dt.strftime("%B %Y")
 
 
+@st.cache_data(ttl=60, show_spinner=False)
 def get_users(month_str: Optional[str] = None) -> Optional[List[str]]:
     try:
         users_df = read_google_sheet_as_df(SPREADSHEET_ID, USERS_WORKSHEET_NAME)
@@ -146,7 +148,8 @@ def clean(
 
     df["any_workout"] = df["workout_date"].notna()
     df["workout_dt"] = pd.to_datetime(df["workout_date"], errors="coerce")
-    df["month"] = df["workout_dt"].dt.to_period("M").astype(str)
+    month_period = df["workout_dt"].dt.to_period("M")
+    df["month"] = month_period.astype(str).where(month_period.notna(), pd.NA)
     df["dow"] = df["workout_dt"].dt.day_name()
     df["dom"] = df["workout_dt"].dt.day
 
@@ -157,6 +160,7 @@ def clean(
 
     return df
 
+@st.cache_data(ttl=60, show_spinner=False)
 def get_data() -> pd.DataFrame:
     try:
         raw = read_google_sheet_as_df(SPREADSHEET_ID, WORKSHEET_NAME)

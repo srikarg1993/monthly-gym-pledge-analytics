@@ -98,7 +98,8 @@ def frontload_vs_cram(df_month: pd.DataFrame):
     mid = start + (end - start) / 2
     mid = date(mid.year, mid.month, int(mid.day))
 
-    d = df_month[df_month["burnt_250"]].copy()
+    qual = df_month[df_month["burnt_250"]].copy()
+    all_names = sorted(df_month["name"].dropna().unique().tolist())
 
     def split_counts(workout_dates):
         days = sorted(set(workout_dates.dropna().tolist()))
@@ -115,8 +116,21 @@ def frontload_vs_cram(df_month: pd.DataFrame):
             style = "Balanced"
         return pd.Series({"first_half": first, "second_half": second, "style": style})
 
-    out = d.groupby("name")["workout_date"].apply(split_counts).unstack().reset_index()
-    return out.sort_values(["style", "first_half"], ascending=[True, False])
+    if qual.empty:
+        out = pd.DataFrame(
+            [{"name": n, "first_half": 0, "second_half": 0, "style": "No qualifying"} for n in all_names]
+        )
+    else:
+        out = qual.groupby("name")["workout_date"].apply(split_counts).unstack().reset_index()
+        missing = [n for n in all_names if n not in set(out["name"])]
+        if missing:
+            filler = pd.DataFrame(
+                [{"name": n, "first_half": 0, "second_half": 0, "style": "No qualifying"} for n in missing]
+            )
+            out = pd.concat([out, filler], ignore_index=True)
+    out["first_half"] = out["first_half"].astype(int)
+    out["second_half"] = out["second_half"].astype(int)
+    return out.sort_values(["style", "first_half"], ascending=[True, False]).reset_index(drop=True)
 
 def month_bounds(month_str: str):
     y, m = map(int, month_str.split("-"))

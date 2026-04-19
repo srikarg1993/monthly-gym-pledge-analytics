@@ -151,3 +151,35 @@ def test_month_leaderboard_without_calories_column():
     out = month_leaderboard(df, "2024-01", cutoff=1)
     assert "total_calories" in out.columns
     assert (out["total_calories"] == 0).all()
+
+
+def test_frontload_vs_cram_includes_non_qualifying_users():
+    df = pd.DataFrame(
+        {
+            "name": ["Ann", "Ann", "Bob"],
+            "workout_date": [date(2024, 1, 2), date(2024, 1, 3), date(2024, 1, 5)],
+            "burnt_250": [True, True, False],
+            "month": ["2024-01"] * 3,
+        }
+    )
+    out = frontload_vs_cram(df)
+    styles = dict(zip(out["name"], out["style"]))
+    assert "Bob" in styles
+    assert styles["Bob"] == "No qualifying"
+    bob = out[out["name"] == "Bob"].iloc[0]
+    assert int(bob["first_half"]) == 0
+    assert int(bob["second_half"]) == 0
+
+
+def test_frontload_vs_cram_all_non_qualifying():
+    df = pd.DataFrame(
+        {
+            "name": ["Ann", "Bob"],
+            "workout_date": [date(2024, 1, 2), date(2024, 1, 5)],
+            "burnt_250": [False, False],
+            "month": ["2024-01", "2024-01"],
+        }
+    )
+    out = frontload_vs_cram(df)
+    assert set(out["name"]) == {"Ann", "Bob"}
+    assert set(out["style"]) == {"No qualifying"}

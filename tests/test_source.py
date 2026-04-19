@@ -117,3 +117,18 @@ def test_clean_without_calories_column():
     assert len(out) == 1
     assert pd.isna(out.iloc[0]["calories_burned"])
     assert pd.isna(out.iloc[0]["calories_met_250"])
+
+
+def test_clean_unparseable_workout_date_yields_na_month():
+    df = pd.DataFrame(
+        {
+            "Timestamp": ["2024-01-05 08:00:00", "2024-01-06 09:00:00"],
+            "You are?": ["Ann", "Bob"],
+            "Workout date": ["2024-01-03", "not-a-date"],
+            "Burnt >= 250 calories?": ["yes", "yes"],
+        }
+    )
+    out = clean(df, dedupe=False)
+    bob_month = out[out["name"] == "Bob"].iloc[0]["month"]
+    assert pd.isna(bob_month)
+    assert "NaT" not in set(out["month"].dropna().unique())
