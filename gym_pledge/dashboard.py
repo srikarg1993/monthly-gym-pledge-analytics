@@ -1,17 +1,18 @@
+from pathlib import Path
+
 import streamlit as st
 
 from app_time import current_month_str
 from config.globals import winner_cutoff_for_month
-from data.source import get_data, get_users
 from data.metrics import month_leaderboard
-from ui.leaderboard import render as render_leaderboard
-from ui.scorecard import render as render_scorecard
-from ui.personalization import render as render_personalization
-from ui.monthovermonth import render as render_monthovermonth
-from ui.yearcalendar import render as render_yearcalendar
+from data.source import get_data, get_users
 from ui.about import render as render_about
+from ui.leaderboard import render as render_leaderboard
 from ui.logyourworkout import render as render_logyourworkout
-from pathlib import Path
+from ui.monthovermonth import render as render_monthovermonth
+from ui.personalization import render as render_personalization
+from ui.scorecard import render as render_scorecard
+from ui.yearcalendar import render as render_yearcalendar
 
 # =========================================================
 # Page config
@@ -27,11 +28,12 @@ st.set_page_config(
 # Load CSS
 # =========================================================
 
+
 def load_css(rel_path: str):
     css_path = Path(__file__).resolve().parent / rel_path
     st.markdown(
         f"<style>{css_path.read_text()}</style>",
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
 load_css("styles/theme.css")
@@ -91,10 +93,6 @@ with st.sidebar:
         st.session_state["tab"] = "Scorecard"
     if st.button("Fitness Yearbook", use_container_width=True):
         st.session_state["tab"] = "Fitness Yearbook"
-    # if st.button("Personalization", use_container_width=True):
-    #     st.session_state["tab"] = "Personalization"
-    # if st.button("Month-over-month Trends", use_container_width=True):
-    #     st.session_state["tab"] = "Month-over-month Trends"
     if st.button("Log Your Workout", use_container_width=True):
         st.session_state["tab"] = "Log Your Workout!"
 
@@ -120,7 +118,6 @@ header_cols = st.columns([1, 0.28], gap="large")
 with header_cols[0]:
     st.markdown("# Monthly Pledge to Fitness ")
 with header_cols[1]:
-    
     # Hide month selector on pages where it isn't needed (Leaderboard and Log Your Workout)
     current_tab = st.session_state.get("tab", "")
     if (
@@ -157,19 +154,16 @@ df_month_leaderboard = df[(df["month"] == lb_month) & (df["workout_date"].notna(
 # =========================================================
 
 if tab == "Leaderboard":
-    render_leaderboard(df = lb, df_month = df_month_leaderboard, month_str = lb_month, cutoff = lb_cutoff)
+    render_leaderboard(df=lb, df_month=df_month_leaderboard, month_str=lb_month, cutoff=lb_cutoff)
 elif tab == "Scorecard":
-    render_scorecard(lb = lb, df_month = df_month, cutoff = lb_cutoff)
+    render_scorecard(lb=lb, df_month=df_month, cutoff=lb_cutoff)
 elif tab == "Personalization":
-    render_personalization( df_month = df_month)
+    render_personalization(df_month=df_month)
 elif tab == "Fitness Yearbook":
-    render_yearcalendar(df = df, month_selected = month_selected)
+    render_yearcalendar(df=df, month_selected=month_selected)
 elif tab == "Month-over-month Trends":
-    render_monthovermonth( df = df)
+    render_monthovermonth(df=df)
 elif tab == "About us":
     render_about()
-else :
+else:
     render_logyourworkout()
-
-    
-    

@@ -1299,4 +1299,3 @@ def render_donut_days_left(completed: int, cutoff: int):
     )
     ax.axis("equal")
     return fig, remaining
-    

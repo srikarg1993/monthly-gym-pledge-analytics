@@ -4,14 +4,14 @@ Contains leaderboard and per-person convenience functions used by the
 dashboard UI.
 """
 
-import pandas as pd
 import calendar
 from datetime import date
+
+import pandas as pd
 
 
 def month_leaderboard(df: pd.DataFrame, month_str: str, cutoff: int, all_users=None) -> pd.DataFrame:
     d = df[(df["month"] == month_str) & (df["workout_date"].notna())].copy()
-
 
     any_days = d.groupby("name")["workout_date"].nunique().rename("workout_days").reset_index()
     qual_days = d[d["burnt_250"]].groupby("name")["workout_date"].nunique().rename("qualifying_days").reset_index()
@@ -21,12 +21,10 @@ def month_leaderboard(df: pd.DataFrame, month_str: str, cutoff: int, all_users=N
     else:
         cal_sum = pd.DataFrame({"name": d["name"].unique(), "total_calories": 0})
 
-
     out = any_days.merge(qual_days, on="name", how="left").merge(cal_sum, on="name", how="left")
     out["qualifying_days"] = out["qualifying_days"].fillna(0).astype(int)
     out["workout_days"] = out["workout_days"].fillna(0).astype(int)
     out["total_calories"] = out["total_calories"].fillna(0).astype(int)
-    
 
     if all_users is not None:
         all_users_df = pd.DataFrame({"name": list(all_users)})
@@ -44,7 +42,6 @@ def month_leaderboard(df: pd.DataFrame, month_str: str, cutoff: int, all_users=N
         .astype(int)
     )
 
-
     # Order leaderboard by qualifying workouts (desc) then alphabetically by name (asc)
     out = out.sort_values(
         ["qualifying_days", "name"],
@@ -52,6 +49,7 @@ def month_leaderboard(df: pd.DataFrame, month_str: str, cutoff: int, all_users=N
     ).reset_index(drop=True)
 
     return out
+
 
 def longest_streak(dates):
     if not dates:
@@ -131,6 +129,7 @@ def frontload_vs_cram(df_month: pd.DataFrame):
     out["first_half"] = out["first_half"].astype(int)
     out["second_half"] = out["second_half"].astype(int)
     return out.sort_values(["style", "first_half"], ascending=[True, False]).reset_index(drop=True)
+
 
 def month_bounds(month_str: str):
     y, m = map(int, month_str.split("-"))

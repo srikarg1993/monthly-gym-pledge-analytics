@@ -229,7 +229,6 @@ def _render_year_calendar(*, df_year: pd.DataFrame, name: str, year: int, name_c
 def render(*, df: pd.DataFrame, month_selected: str) -> None:
     year = _year_from_month_str(month_selected)
     st.subheader(f"{year} Fitness Yearbook")
-    # st.markdown("<div class='small-muted'>All 12 months - per-person view</div>", unsafe_allow_html=True)
 
     name_col = _name_col(df)
     df_year = df.copy() if df is not None else pd.DataFrame()

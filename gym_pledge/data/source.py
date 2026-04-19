@@ -3,9 +3,9 @@
 from datetime import datetime
 from typing import List, Optional
 
+import gspread
 import pandas as pd
 import streamlit as st
-import gspread
 from google.oauth2.service_account import Credentials
 from config.globals import (
     SCOPES,
@@ -84,6 +84,7 @@ def normalize_bool(x) -> bool:
     s = str(x).strip().lower()
     return s in {"yes", "true", "1", "y", "t"}
 
+
 def clean(
     df: pd.DataFrame,
     *,
@@ -160,6 +161,7 @@ def clean(
 
     return df
 
+
 @st.cache_data(ttl=60, show_spinner=False)
 def get_data() -> pd.DataFrame:
     try:
@@ -175,6 +177,6 @@ def get_data() -> pd.DataFrame:
         st.error("Data cleaning failed (header mismatch is most likely).")
         st.exception(e)
         st.stop()
-    
+
     return df
     

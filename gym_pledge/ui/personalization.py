@@ -1,11 +1,8 @@
 """Personalization page: per-person day-of-week trends and comparison charts."""
 
-import pandas as pd
-import matplotlib.pyplot as plt
 import streamlit as st
-import seaborn as sns
 
-from ui.common import style_plots, set_title_labels, render_seaborn_line, render_card_start, render_card_end
+from ui.common import render_card_end, render_card_start, render_seaborn_line, style_plots
 
 
 def render(*, df_month) -> None:
@@ -15,7 +12,7 @@ def render(*, df_month) -> None:
     people = sorted(df_month["name"].dropna().unique().tolist())
     who = st.selectbox("Person", people)
 
-    weekday_order = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
+    weekday_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
     style_plots()
     overall = (
@@ -37,13 +34,29 @@ def render(*, df_month) -> None:
     left, right = st.columns(2, gap="large")
     with left:
         render_card_start()
-        fig = render_seaborn_line(overall, x="dow", y="Unique workout days", title="Overall workouts by weekday", xlabel="Weekday", ylabel="Unique days", figsize=(6.9, 3.2))
+        fig = render_seaborn_line(
+            overall,
+            x="dow",
+            y="Unique workout days",
+            title="Overall workouts by weekday",
+            xlabel="Weekday",
+            ylabel="Unique days",
+            figsize=(6.9, 3.2),
+        )
         st.pyplot(fig, use_container_width=True)
         render_card_end()
 
     with right:
         render_card_start()
-        fig = render_seaborn_line(person, x="dow", y="Unique workout days", title=f"{who}: workouts by weekday", xlabel="Weekday", ylabel="Unique days", figsize=(6.9, 3.2))
+        fig = render_seaborn_line(
+            person,
+            x="dow",
+            y="Unique workout days",
+            title=f"{who}: workouts by weekday",
+            xlabel="Weekday",
+            ylabel="Unique days",
+            figsize=(6.9, 3.2),
+        )
         st.pyplot(fig, use_container_width=True)
         render_card_end()
 
