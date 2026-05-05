@@ -78,7 +78,7 @@ def get_users(month_str: str | None = None) -> list[str] | None:
     return users
 
 
-def normalize_bool(x) -> bool:
+def normalize_bool(x: object) -> bool:
     if pd.isna(x):
         return False
     s = str(x).strip().lower()

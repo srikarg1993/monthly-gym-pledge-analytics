@@ -2,6 +2,8 @@
 
 Streamlit dashboard for a monthly fitness pledge, backed by a Google Form and Google Sheet.
 
+> AI agents working on this repo: read [`agents.md`](agents.md) first. It captures the project's hard rules, layering, visual design language, and skill index.
+
 ## Features
 - Sidebar navigation: About us, Leaderboard, Scorecard, Log Your Workout
 - Leaderboard for the current month with active-user backfill
@@ -9,11 +11,22 @@ Streamlit dashboard for a monthly fitness pledge, backed by a Google Form and Go
 - Year calendar heatmap and month-over-month trends
 - Workout logging CTA that opens the Google Form
 
+## Documentation
+
+- [`agents.md`](agents.md) — system prompt for any AI agent
+- [`docs/adr/`](docs/adr/) — Architectural Decision Records
+- [`docs/skills/`](docs/skills/) — task-specific recipes (charts, metrics, data loading, UI page, testing)
+- [`CLAUDE.md`](CLAUDE.md) — Claude-specific guidance (mirror of `agents.md` essentials)
+
 ## Tests
 
 ```bash
 pytest tests/
+# with coverage:
+pytest --cov=gym_pledge.data --cov=gym_pledge.config tests/
 ```
+
+Coverage floor: **75 %** on `gym_pledge/data/*` and `gym_pledge/config/*`. UI render functions are not held to this floor — their pure data helpers are.
 
 ## Setup
 1) Install dependencies:
@@ -60,6 +73,10 @@ streamlit run gym_pledge/dashboard.py
 ## Project layout
 - `gym_pledge/dashboard.py`: app shell and sidebar navigation
 - `gym_pledge/ui/`: UI pages (leaderboard, scorecard, log your workout, about)
-- `gym_pledge/data/`: data loading and cleanup
-- `gym_pledge/data/metrics.py`: data metrics and leaderboard logic
+- `gym_pledge/ui/common.py`: shared chart factories (see [ADR 0005](docs/adr/0005-unified-dark-visual-language.md))
+- `gym_pledge/data/source.py`: Google Sheets I/O, dedupe, column derivation
+- `gym_pledge/data/metrics.py`: pure analytical functions (leaderboard, streaks, lazy logger, frontload/cram)
+- `gym_pledge/config/globals.py`: spreadsheet IDs, cutoff, per-month overrides
+- `gym_pledge/app_time.py`: timezone-aware "now" / "today" (see [ADR 0004](docs/adr/0004-timezone-via-app-time.md))
 - `gym_pledge/styles/theme.css`: app styling
+- `gym_pledge/00_Archive/`: read-only history (see [ADR 0006](docs/adr/0006-archive-folder-policy.md))

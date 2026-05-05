@@ -5,6 +5,7 @@ dashboard UI.
 """
 
 import calendar
+from collections.abc import Iterable
 from datetime import date
 
 import pandas as pd
@@ -51,10 +52,15 @@ def month_leaderboard(df: pd.DataFrame, month_str: str, cutoff: int, all_users=N
     return out
 
 
-def longest_streak(dates):
-    if not dates:
+def longest_streak(dates: Iterable[date]) -> int:
+    """Return the length of the longest run of consecutive calendar days.
+
+    ``dates`` may contain duplicates and is treated as a set. Returns ``0``
+    when the input is empty.
+    """
+    ds = sorted({d for d in dates if d is not None})
+    if not ds:
         return 0
-    ds = sorted(set(dates))
     best = cur = 1
     for i in range(1, len(ds)):
         if (ds[i] - ds[i - 1]).days == 1:
@@ -65,7 +71,9 @@ def longest_streak(dates):
     return best
 
 
-def fastest_winner_date(df_month: pd.DataFrame, name: str, cutoff: int):
+def fastest_winner_date(
+    df_month: pd.DataFrame, name: str, cutoff: int
+) -> date | None:
     d = df_month[(df_month["name"] == name) & (df_month["burnt_250"])].copy()
     if d.empty:
         return None
@@ -75,7 +83,7 @@ def fastest_winner_date(df_month: pd.DataFrame, name: str, cutoff: int):
     return days[cutoff - 1]
 
 
-def lazy_logger_score(df_month: pd.DataFrame):
+def lazy_logger_score(df_month: pd.DataFrame) -> pd.DataFrame | None:
     d = df_month.dropna(subset=["workout_date", "timestamp"]).copy()
     if d.empty:
         return None
@@ -89,7 +97,7 @@ def lazy_logger_score(df_month: pd.DataFrame):
     return agg
 
 
-def frontload_vs_cram(df_month: pd.DataFrame):
+def frontload_vs_cram(df_month: pd.DataFrame) -> pd.DataFrame:
     if df_month.empty:
         return pd.DataFrame()
     start, end = month_bounds(df_month["month"].iloc[0])
@@ -131,7 +139,8 @@ def frontload_vs_cram(df_month: pd.DataFrame):
     return out.sort_values(["style", "first_half"], ascending=[True, False]).reset_index(drop=True)
 
 
-def month_bounds(month_str: str):
+def month_bounds(month_str: str) -> tuple[date, date]:
+    """Return ``(first_day, last_day)`` for a ``YYYY-MM`` string."""
     y, m = map(int, month_str.split("-"))
     last_day = calendar.monthrange(y, m)[1]
     return date(y, m, 1), date(y, m, last_day)

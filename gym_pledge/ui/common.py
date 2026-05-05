@@ -927,7 +927,7 @@ def alt_delay_runway_chart(
     if df is None or df.empty:
         return alt.Chart(pd.DataFrame())
 
-    ZONE_ORDER = ["Same Day", "Â½â€“1 day", "2+ days"]
+    ZONE_ORDER = ["Same Day", "½–1 day", "2+ days"]
     ZONE_COLORS = [ALT_SAGE, ALT_COPPER, "#B56B6D"]
     ZONE_BG = ["#38534A", "#4E4A3E", "#513B3D"]
 
@@ -1445,83 +1445,8 @@ def alt_weekday_cadence_chart(
     )
 
 
-def alt_weekday_bubble(counts: pd.DataFrame, weekday_order: list[str], color: str = "#4fa3ff", height: int = 260, size_range: tuple[int, int] = (300, 10000)):
-    """Return an Altair bubble chart for weekday counts.
-
-    Expects `counts` to have columns ['Weekday', 'count'] and uses `weekday_order`
-    to ensure consistent ordering.
-    """
-    base = alt.Chart(counts)
-    chart_height = height
-    center_y = chart_height / 2
-
-    backdrop = base.mark_circle(opacity=0.12, fillOpacity=0.12).encode(
-        x=alt.X("Weekday:N", sort=weekday_order, title=None, axis=alt.Axis(labels=False, ticks=False, domain=False)),
-        y=alt.value(center_y),
-        size=alt.Size("count:Q", scale=alt.Scale(range=list(size_range)), legend=None),
-        color=alt.value("#000"),
-    )
-
-    bubbles = base.mark_circle(opacity=0.95).encode(
-        x=alt.X("Weekday:N", sort=weekday_order, title=None, axis=alt.Axis(labelAngle=0, labelColor="#9aa0ab")),
-        y=alt.value(center_y),
-        size=alt.Size("count:Q", title=None, legend=None, scale=alt.Scale(range=list(size_range))),
-        color=alt.value(color),
-        tooltip=[alt.Tooltip("Weekday:N"), alt.Tooltip("count:Q", title="Workouts")],
-    )
-
-    labels = base.mark_text(dy=0, color="#ffffff", fontSize=12, fontWeight=700).encode(
-        x=alt.X("Weekday:N", sort=weekday_order),
-        y=alt.value(center_y),
-        text=alt.Text("count:Q"),
-    )
-
-    names = base.mark_text(dy=72, color="#ffffff", fontSize=13, fontWeight=700).encode(
-        x=alt.X("Weekday:N", sort=weekday_order),
-        y=alt.value(center_y),
-        text=alt.Text("Weekday:N"),
-    )
-
-    return _configure_altair((backdrop + bubbles + labels + names).properties(height=chart_height))
-
-
-def render_donut_days_left(completed: int, cutoff: int):
-    """Render the small donut showing remaining days until cutoff and return a Matplotlib figure."""
-    remaining = max(cutoff - completed, 0)
-
-    fig, ax = plt.subplots()
-    ax.pie(
-        [completed, remaining],
-        startangle=90,
-        counterclock=False,
-        wedgeprops=dict(width=0.2, edgecolor="none"),
-    )
-
-    ax.text(
-        0,
-        0.05,
-        f"{remaining}",
-        ha="center",
-        va="center",
-        fontsize=30,
-        fontweight="800",
-        color="#E4E6EB",
-    )
-    ax.text(
-        0,
-        -0.18,
-        "days left",
-        ha="center",
-        va="center",
-        fontsize=15,
-        color="#A0A4B3",
-    )
-    ax.axis("equal")
-    return fig, remaining
-
-
 # ---------------------------------------------------------------------------
-# Weekday Spider/Radar â€” matplotlib polar plot with dark theme
+# Weekday Spider/Radar — matplotlib polar plot with dark theme
 # ---------------------------------------------------------------------------
 
 def weekday_radar_figure(
