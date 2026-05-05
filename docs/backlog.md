@@ -9,23 +9,37 @@ invest a session in repo-grade tooling.
 
 - ✅ **CI**: `.github/workflows/ci.yml` runs `ruff check` + `pytest` on push
   to `main` / `p2f` and on every PR.
-- ❌ **CD**: none. App runs locally via `start-app.sh` or in the dev
-  container. No hosted URL.
+- ✅ **CD**: Streamlit Community Cloud hosts `main` at
+  https://pledge2fit.streamlit.app/. Every push to `main` redeploys
+  automatically. Secrets configured in the Streamlit Cloud app settings
+  (mirrors `.streamlit/secrets.toml`).
 
----
+## CD operational notes
 
-## CD — hosting options (only if you want a public URL)
+- **Deploy trigger**: any commit landing on `main`.
+- **Pre-merge gate**: GitHub Actions CI runs against PRs into `main`. Don't
+  merge red.
+- **Rollback**: redeploy a previous commit from the Streamlit Cloud
+  dashboard, or `git revert <sha> && git push origin main`.
+- **Secrets sync**: `.streamlit/secrets.toml` is gitignored. The
+  `[gcp_service_account]` table must also exist in **Streamlit Cloud →
+  App settings → Secrets**. If you rotate the service account key, update
+  both places.
+- **Cold-start**: free-tier apps sleep after inactivity; first request after
+  sleep takes ~10-30 s.
+- **Logs**: Streamlit Cloud dashboard → "Manage app" → "Logs".
+
+## CD — alternative hosts (only if you outgrow Streamlit Cloud)
+
+Reasons you might switch: private repo requirement, custom domain with TLS,
+no cold-start, multi-region, OAuth gating, more memory/CPU.
 
 | Host | Cost | Setup | Trade-off |
 |---|---|---|---|
-| Streamlit Community Cloud | Free | ~5 min | Public repo or paid; auto-deploy on push |
-| Fly.io | Free / ~$5 mo | ~30 min | Real container; private repos OK; needs Dockerfile + fly.toml; secrets via `fly secrets set` |
-| Render.com | Free (sleeps idle) | ~15 min | Auto-deploy on push |
+| Fly.io | Free / ~$5 mo | ~30 min | Real container, private repos, secrets via `fly secrets set`, no cold start on paid tier |
+| Render.com | Free (sleeps) / $7 mo | ~15 min | Auto-deploy on push, cleaner logs |
 | Hugging Face Spaces | Free | ~10 min | Public Streamlit hosting |
-| Railway | $5/mo | ~10 min | Slick UX; auto-deploy on push |
-
-**Recommendation if/when needed**: Fly.io for private repo support + free
-tier + secrets management.
+| Railway | $5/mo | ~10 min | Auto-deploy on push, slick UX |
 
 ---
 
@@ -100,10 +114,13 @@ Settings → Branches:
 
 Smallest set of changes that captures most of the value:
 
-1. Add coverage gate to `ci.yml`
+1. Add coverage gate to `ci.yml` (1 line: `--cov-fail-under=75`)
 2. Add `.github/dependabot.yml` for `pip` + `github-actions`
 3. Enable Dependabot alerts + secret scanning + push protection in repo
    settings
-4. Add branch protection on `main`
+4. Add branch protection on `main` — require green CI before merge
+   (especially valuable now that `main` auto-deploys to Streamlit Cloud)
+5. Wire a post-deploy health check: GitHub Action on `push: main` that hits
+   https://pledge2fit.streamlit.app/ and fails if status != 200
 
 Everything else is over-engineering for a private friend-group app.

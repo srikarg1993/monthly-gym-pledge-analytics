@@ -16,6 +16,9 @@ boundaries the human maintainer expects every contribution to respect.
   · gspread + google-auth · pytest · ruff · pre-commit.
 - **Tooling**: `uv` for dependency management. Local `.venv/` lives at repo root.
 - **CI**: GitHub Actions (`.github/workflows/ci.yml`) runs ruff + pytest on push.
+- **CD**: Streamlit Community Cloud auto-deploys `main` to
+  https://pledge2fit.streamlit.app/. Secrets are mirrored in the Streamlit
+  Cloud app settings. **Any push to `main` ships to users** — gate via PR.
 
 ---
 
