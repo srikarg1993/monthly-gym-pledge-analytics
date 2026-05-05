@@ -180,6 +180,7 @@ the task before improvising:
 - `docs/skills/data-loading.md` — touching Google Sheets I/O, caching, or `clean()`.
 - `docs/skills/ui-page.md` — adding a new sidebar page.
 - `docs/skills/testing.md` — writing tests, fixtures, and coverage expectations.
+- `docs/skills/commit-messages.md` — writing high-signal git commit messages.
 
 ---
 
