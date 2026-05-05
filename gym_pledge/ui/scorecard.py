@@ -1,53 +1,442 @@
 import pandas as pd
 import streamlit as st
 
+from app_time import current_month_str, today_app
 from data.metrics import (
-    longest_streak,
     fastest_winner_date,
-    lazy_logger_score,
     frontload_vs_cram,
+    longest_streak,
+    month_bounds,
 )
-from ui.common import render_styled_table, alt_weekday_bubble, render_card_start, render_card_end
-import altair as alt
+from ui.common import (
+    alt_cumulative_calorie_race_chart,
+    alt_goal_ladder_chart,
+    alt_group_split_chart,
+    alt_streak_heartbeat_chart,
+    build_cumulative_calories_long,
+    pack_lazy_bubbles,
+    render_fastest_winner_podium,
+    render_lazy_bubble_clusters,
+    weekday_radar_figure,
+)
+
+STREAK_KEY = "scorecard_streak_participant"
+WEEKDAY_RADAR_KEY = "scorecard_weekday_radar_participant"
+STATUS_ORDER = ["Winner", "1-2 away", "Workout-rich", "Other"]
+STATUS_COLORS = {
+    "Winner": "#5FA68D",
+    "1-2 away": "#B7835A",
+    "Workout-rich": "#6E88A6",
+    "Other": "#5D6B7C",
+}
+WEEKDAY_ORDER = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+]
+
+
+def _chunks(df: pd.DataFrame, size: int):
+    for i in range(0, len(df), size):
+        yield df.iloc[i:i + size]
+
+
+def _close_targets(cutoff: int) -> set[int]:
+    return {days for days in (cutoff - 2, cutoff - 1) if days >= 0}
+
+
+def _participant_status(row: pd.Series, cutoff: int) -> str:
+    qualifying_days = int(row.get("qualifying_days", 0))
+    workout_days = int(row.get("workout_days", 0))
+    close_targets = _close_targets(cutoff)
+
+    if qualifying_days >= cutoff:
+        return "Winner"
+    if qualifying_days in close_targets:
+        return "1-2 away"
+    if workout_days >= cutoff:
+        return "Workout-rich"
+    return "Other"
+
+
+def _build_status_mix_df(lb: pd.DataFrame, cutoff: int) -> pd.DataFrame:
+    if lb is None or lb.empty:
+        return pd.DataFrame(columns=["Status", "People", "Share", "Color"])
+
+    mix = lb.copy()
+    mix["Status"] = mix.apply(_participant_status, cutoff=cutoff, axis=1)
+    counts = (
+        mix["Status"]
+        .value_counts()
+        .reindex(STATUS_ORDER, fill_value=0)
+        .rename_axis("Status")
+        .reset_index(name="People")
+    )
+    total_people = int(counts["People"].sum())
+    counts["Share"] = counts["People"] / total_people if total_people else 0.0
+    counts["Color"] = counts["Status"].map(STATUS_COLORS)
+    return counts
+
+
+def _build_close_call_data(lb: pd.DataFrame, cutoff: int) -> tuple[pd.DataFrame, pd.DataFrame]:
+    if lb is None or lb.empty:
+        empty = pd.DataFrame(columns=["Name", "Qualifying Days", "Workout Days", "Days to Cutoff", "Bucket"])
+        return empty, empty.copy()
+
+    base = lb.copy()
+    base["Status"] = base.apply(_participant_status, cutoff=cutoff, axis=1)
+    base["Days to Cutoff"] = (cutoff - base["qualifying_days"]).clip(lower=0).astype(int)
+    base["Bucket"] = base["Days to Cutoff"].map({1: "1 away", 2: "2 away"}).fillna(base["Status"])
+    base = base.rename(
+        columns={
+            "name": "Name",
+            "qualifying_days": "Qualifying Days",
+            "workout_days": "Workout Days",
+        }
+    )
+
+    close_calls = base[base["Bucket"].isin(["1 away", "2 away"])].copy()
+    close_calls = close_calls.sort_values(
+        ["Days to Cutoff", "Qualifying Days", "Workout Days", "Name"],
+        ascending=[True, False, False, True],
+    ).reset_index(drop=True)
+
+    workout_rich = base[base["Status"] == "Workout-rich"].copy()
+    workout_rich = workout_rich.sort_values(
+        ["Days to Cutoff", "Qualifying Days", "Workout Days", "Name"],
+        ascending=[True, False, False, True],
+    ).reset_index(drop=True)
+
+    cols = ["Name", "Qualifying Days", "Workout Days", "Days to Cutoff", "Bucket"]
+    return close_calls[cols], workout_rich[cols]
+
+
+def _build_progress_ladder_df(lb: pd.DataFrame) -> pd.DataFrame:
+    if lb is None or lb.empty:
+        return pd.DataFrame(columns=["Name", "Qualifying Days", "Workout Days"])
+
+    progress = lb.rename(
+        columns={
+            "name": "Name",
+            "qualifying_days": "Qualifying Days",
+            "workout_days": "Workout Days",
+        }
+    )[["Name", "Qualifying Days", "Workout Days"]].copy()
+
+    return progress.sort_values(
+        ["Qualifying Days", "Workout Days", "Name"],
+        ascending=[False, False, True],
+    ).reset_index(drop=True)
+
+
+def _build_streak_df(df_month: pd.DataFrame) -> pd.DataFrame:
+    if df_month is None or df_month.empty:
+        return pd.DataFrame(columns=["Name", "Longest Streak"])
+
+    rows = []
+    for name, group in df_month[df_month["burnt_250"]].groupby("name"):
+        rows.append(
+            {
+                "Name": str(name),
+                "Longest Streak": longest_streak(group["workout_date"].dropna().tolist()),
+            }
+        )
+
+    if not rows:
+        return pd.DataFrame(columns=["Name", "Longest Streak"])
+
+    out = pd.DataFrame(rows)
+    return out.sort_values(["Longest Streak", "Name"], ascending=[False, True]).reset_index(drop=True)
+
+
+def _resolve_streak_focus(lb: pd.DataFrame, streak_df: pd.DataFrame) -> str | None:
+    people = sorted(lb["name"].dropna().astype(str).unique().tolist()) if lb is not None and not lb.empty else []
+    if not people:
+        return None
+
+    # Seed session state exactly once so Streamlit owns the value going forward.
+    # Avoids "widget created with a default value but also had its value set via
+    # the Session State API" warning by NOT also passing `index=` to the widget.
+    if st.session_state.get(STREAK_KEY) not in people:
+        st.session_state[STREAK_KEY] = str(streak_df.iloc[0]["Name"]) if not streak_df.empty else people[0]
+
+    return st.selectbox(
+        "Choose participant",
+        people,
+        key=STREAK_KEY,
+        label_visibility="collapsed",
+    )
+
+
+def _build_all_streaks_df(df_month: pd.DataFrame, exclude_name: str | None = None) -> pd.DataFrame:
+    if df_month is None or df_month.empty:
+        return pd.DataFrame(columns=["Day", "Streak", "Name"])
+
+    month_values = df_month["month"].dropna().astype(str)
+    if month_values.empty:
+        return pd.DataFrame(columns=["Day", "Streak", "Name"])
+
+    month_str = month_values.iloc[0]
+    start, end = month_bounds(month_str)
+    if month_str == current_month_str():
+        end = min(end, today_app())
+
+    names = sorted(df_month["name"].dropna().astype(str).unique().tolist())
+    all_rows = []
+    for name in names:
+        if name == exclude_name:
+            continue
+        qualifying_dates = set(
+            pd.to_datetime(
+                df_month[(df_month["name"].astype(str) == name) & (df_month["burnt_250"])]["workout_date"],
+                errors="coerce",
+            ).dt.date.dropna().tolist()
+        )
+        streak = 0
+        for day in pd.date_range(start=start, end=end, freq="D"):
+            current_day = day.date()
+            qualifying = current_day in qualifying_dates
+            streak = streak + 1 if qualifying else 0
+            all_rows.append({"Day": int(day.day), "Streak": streak, "Name": name})
+
+    return pd.DataFrame(all_rows) if all_rows else pd.DataFrame(columns=["Day", "Streak", "Name"])
+
+
+def _build_streak_wave_df(df_month: pd.DataFrame, focus_name: str) -> pd.DataFrame:
+    if df_month is None or df_month.empty or not focus_name:
+        return pd.DataFrame(columns=["Day", "Streak", "Qualifying", "Day Label"])
+
+    month_values = df_month["month"].dropna().astype(str)
+    if month_values.empty:
+        return pd.DataFrame(columns=["Day", "Streak", "Qualifying", "Day Label"])
+
+    month_str = month_values.iloc[0]
+    start, end = month_bounds(month_str)
+    if month_str == current_month_str():
+        end = min(end, today_app())
+
+    qualifying_dates = set(
+        pd.to_datetime(
+            df_month[(df_month["name"].astype(str) == str(focus_name)) & (df_month["burnt_250"])]["workout_date"],
+            errors="coerce",
+        ).dt.date.dropna().tolist()
+    )
+
+    rows = []
+    streak = 0
+    for day in pd.date_range(start=start, end=end, freq="D"):
+        current_day = day.date()
+        qualifying = current_day in qualifying_dates
+        streak = streak + 1 if qualifying else 0
+        rows.append(
+            {
+                "Day": int(day.day),
+                "Streak": streak,
+                "Qualifying": qualifying,
+                "Day Label": day.strftime("%b %d"),
+            }
+        )
+
+    return pd.DataFrame(rows)
+
+
+def _build_fastest_winner_df(df_month: pd.DataFrame, cutoff: int) -> tuple[pd.DataFrame, int]:
+    if df_month is None or df_month.empty:
+        return pd.DataFrame(columns=["Name", "Clinch Day", "Finish Label", "Hit cutoff on"]), 31
+
+    month_values = df_month["month"].dropna().astype(str)
+    month_days = month_bounds(month_values.iloc[0])[1].day if not month_values.empty else 31
+
+    rows = []
+    for name in sorted(df_month["name"].dropna().astype(str).unique().tolist()):
+        winner_date = fastest_winner_date(df_month, name, cutoff)
+        if winner_date:
+            rows.append(
+                {
+                    "Name": name,
+                    "Clinch Day": int(winner_date.day),
+                    "Finish Label": f"Day {winner_date.day}",
+                    "Hit cutoff on": winner_date,
+                }
+            )
+
+    if not rows:
+        return pd.DataFrame(columns=["Name", "Clinch Day", "Finish Label", "Hit cutoff on"]), month_days
+
+    out = pd.DataFrame(rows)
+    out = out.sort_values(["Clinch Day", "Name"], ascending=[True, True]).reset_index(drop=True)
+    return out, month_days
+
+
+def _build_lazy_df(df_month: pd.DataFrame) -> pd.DataFrame | None:
+    if df_month is None or df_month.empty:
+        return None
+
+    logged = df_month.dropna(subset=["workout_date", "timestamp"]).copy()
+    if logged.empty:
+        return None
+
+    out = (
+        logged.groupby("name")
+        .agg(
+            **{
+                "Avg. Log Delay (Days)": ("log_delay_days", "mean"),
+                "Logged Workouts": ("workout_date", "nunique"),
+            }
+        )
+        .reset_index()
+        .rename(columns={"name": "Name"})
+    )
+    out["Avg. Log Delay (Days)"] = out["Avg. Log Delay (Days)"].round(2)
+    return out.sort_values(["Avg. Log Delay (Days)", "Name"], ascending=[False, True]).reset_index(drop=True)
+
+
+def _build_style_balance_df(fl: pd.DataFrame) -> pd.DataFrame:
+    if fl is None or fl.empty:
+        return pd.DataFrame(columns=["Name", "First Half", "Second Half", "Style", "Balance"])
+
+    out = fl.rename(
+        columns={
+            "name": "Name",
+            "first_half": "First Half",
+            "second_half": "Second Half",
+            "style": "Style",
+        }
+    ).copy()
+    out["Balance"] = out["Second Half"] - out["First Half"]
+    out["Total"] = out["First Half"] + out["Second Half"]
+
+    # Desired chart order (top -> bottom):
+    #   1. Front-loaders, sorted by First Half DESC (most front-loaded at top).
+    #   2. Balanced, sorted by Total DESC (most active balanced row higher).
+    #   3. Crammers, sorted by Second Half ASC (least crammed first, most
+    #      crammed at the very bottom).
+    style_rank = {"Front-loader": 0, "Balanced": 1, "Crammer": 2}
+    out["_style_rank"] = out["Style"].map(style_rank).fillna(99).astype(int)
+
+    # Within-group sort keys. We negate columns we want DESC so a single
+    # ascending sort produces the right order.
+    out["_within_key"] = 0.0
+    front_mask = out["Style"] == "Front-loader"
+    bal_mask = out["Style"] == "Balanced"
+    cram_mask = out["Style"] == "Crammer"
+    out.loc[front_mask, "_within_key"] = -out.loc[front_mask, "First Half"].astype(float)
+    out.loc[bal_mask, "_within_key"] = -out.loc[bal_mask, "Total"].astype(float)
+    out.loc[cram_mask, "_within_key"] = out.loc[cram_mask, "Second Half"].astype(float)
+
+    out = out.sort_values(
+        ["_style_rank", "_within_key", "Name"],
+        ascending=[True, True, True],
+    ).reset_index(drop=True)
+
+    # Altair's categorical y-axis with `sort=` argument keeps the dataframe's
+    # order top-to-bottom, so the first row in `out` becomes the topmost row
+    # in the chart. No reversal needed.
+    return out.drop(columns=["_style_rank", "_within_key", "Total"])
+
+
+def _build_qualifying_weekday_counts(df_month: pd.DataFrame, *, name: str | None = None) -> list[int]:
+    """Return qualifying-workout counts per weekday in WEEKDAY_ORDER order.
+
+    Filters to ``burnt_250 == True`` rows; if ``name`` is provided, scopes to
+    that participant. Always returns a list of length 7 with ints (0 for any
+    weekday with no qualifying workouts), so the radar always closes cleanly.
+    """
+    if df_month is None or df_month.empty:
+        return [0] * len(WEEKDAY_ORDER)
+
+    scoped = df_month[df_month["burnt_250"]]
+    if name is not None:
+        scoped = scoped[scoped["name"].astype(str) == str(name)]
+    if scoped.empty:
+        return [0] * len(WEEKDAY_ORDER)
+
+    counts = (
+        pd.to_datetime(scoped["workout_date"], errors="coerce")
+        .dt.day_name()
+        .value_counts()
+        .reindex(WEEKDAY_ORDER, fill_value=0)
+    )
+    return [int(v) for v in counts.tolist()]
+
+
+def _resolve_weekday_focus(lb: pd.DataFrame) -> str | None:
+    """Selectbox-driven candidate picker for the weekday radar."""
+    people = sorted(lb["name"].dropna().astype(str).unique().tolist()) if lb is not None and not lb.empty else []
+    if not people:
+        return None
+
+    # Seed exactly once so Streamlit owns the value (avoids the "default value
+    # but also had its value set via Session State" warning).
+    if st.session_state.get(WEEKDAY_RADAR_KEY) not in people:
+        st.session_state[WEEKDAY_RADAR_KEY] = people[0]
+
+    return st.selectbox(
+        "Choose participant",
+        people,
+        key=WEEKDAY_RADAR_KEY,
+        label_visibility="collapsed",
+    )
+
+
+def _build_weekday_mix_df(df_month: pd.DataFrame) -> pd.DataFrame:
+    """Deprecated builder retained for backward compatibility (returned all-vs-
+    qualifying weekday counts for the legacy bar+line chart). The current
+    radar uses :func:`_build_qualifying_weekday_counts` instead.
+    """
+    if df_month is None or df_month.empty:
+        return pd.DataFrame(
+            {
+                "Weekday": WEEKDAY_ORDER,
+                "All Workouts": [0] * len(WEEKDAY_ORDER),
+                "Qualifying Workouts": [0] * len(WEEKDAY_ORDER),
+            }
+        )
+
+    dates = pd.to_datetime(df_month["workout_date"], errors="coerce")
+    overall = (
+        dates.dt.day_name().rename("Weekday").to_frame().assign(count=1)
+        .groupby("Weekday")["count"]
+        .sum()
+        .reindex(WEEKDAY_ORDER, fill_value=0)
+    )
+    qualifying = (
+        pd.to_datetime(df_month[df_month["burnt_250"]]["workout_date"], errors="coerce")
+        .dt.day_name()
+        .rename("Weekday")
+        .to_frame()
+        .assign(count=1)
+        .groupby("Weekday")["count"]
+        .sum()
+        .reindex(WEEKDAY_ORDER, fill_value=0)
+    )
+
+    out = pd.DataFrame(
+        {
+            "Weekday": WEEKDAY_ORDER,
+            "All Workouts": overall.values,
+            "Qualifying Workouts": qualifying.values,
+        }
+    )
+    out["Weekday"] = pd.Categorical(out["Weekday"], categories=WEEKDAY_ORDER, ordered=True)
+    return out.sort_values("Weekday").reset_index(drop=True)
 
 
 def render(*, lb, df_month, cutoff: int) -> None:
-    # st.markdown("<hr>", unsafe_allow_html=True)
     winner_df = lb[lb["is_winner"]].copy()
-
-    # winner_df = lb[lb["rank"] <= 4].reset_index(drop=True)
-
-    streak_rows = []
-    for name, g in df_month[df_month["burnt_250"]].groupby("name"):
-        streak_rows.append({"Name": name, "Longest Streak": longest_streak(g["workout_date"].dropna().tolist())})
-    streak_df = pd.DataFrame(streak_rows).sort_values("Longest Streak", ascending=False)
-
-    fw_rows = []
-    for name in df_month["name"].dropna().unique():
-        fw = fastest_winner_date(df_month, name, cutoff)
-        if fw:
-            fw_rows.append({"Name": name, "Hit cutoff on": fw})
-    fw_df = pd.DataFrame(fw_rows).sort_values("Hit cutoff on") if fw_rows else pd.DataFrame(columns=["Name","Hit cutoff on"])
-
-    lazy_df = lazy_logger_score(df_month)
-    fl = frontload_vs_cram(df_month)
-
-    barely_missed = lb[(~lb["is_winner"]) & (lb["qualifying_days"].isin([cutoff - 2, cutoff - 1]))].copy()
-    barely_missed = barely_missed.rename(columns={"name":"Name","qualifying_days":"Qualifying Days","workouts_left":"Workouts Left","workout_days":"Workout Days"})
-
-    consistent_not_qual = lb[(~lb["is_winner"]) & (lb["workout_days"] >= cutoff)].copy()
-    consistent_not_qual = consistent_not_qual.rename(columns={"name":"Name","qualifying_days":"Qualifying Days","workouts_left":"Workouts Left","workout_days":"Workout Days"})
+    progress_df = _build_progress_ladder_df(lb)
+    streak_df = _build_streak_df(df_month)
+    fastest_df, month_days = _build_fastest_winner_df(df_month, cutoff)
+    lazy_df = _build_lazy_df(df_month)
+    style_df = _build_style_balance_df(frontload_vs_cram(df_month))
 
     st.markdown("### This month's winners!! ")
     st.markdown("Congratulations guys!! Each one of you burnt 4000 + calories this month.")
 
-    def _chunks(df, n):
-        for i in range(0, len(df), n):
-            yield df.iloc[i:i + n]
-
-    # use shared helper from ui.common: render_styled_table
-
-    # Render winners as tiles in rows of 4 columns
     if winner_df.empty:
         st.caption("No winners yet.")
     else:
@@ -58,172 +447,241 @@ def render(*, lb, df_month, cutoff: int) -> None:
                     st.markdown(
                         f"""
                         <div style="border-radius:8px; padding:12px; text-align:center; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
-                          <div style="font-size:60px">🏆</div>
+                          <div style="font-size:60px">&#127942;</div>
                           <div style="font-weight:600; margin-top:6px">{row['name']}</div>
-                          <div style="color:#666;">{int(row['qualifying_days'])} workouts</div>
+                          <div style="color:#9aa0ab;">{int(row['qualifying_days'])} qualifying workouts</div>
                         </div>
                         """,
                         unsafe_allow_html=True,
                     )
-    # Big-picture group summary stats
+
     total_participants = int(lb["name"].nunique()) if "name" in lb.columns else int(len(lb))
     total_winners = int(lb.get("is_winner", pd.Series(dtype=int)).sum()) if not lb.empty else 0
     total_workouts = int(lb.get("workout_days", pd.Series(dtype=int)).sum()) if not lb.empty else 0
-    total_calories = int(((lb.get("qualifying_days", 0) * 250) + ((lb.get("workout_days", 0) - lb.get("qualifying_days", 0)) * 150)).sum()) if not lb.empty else 0
-    
-    ### Group Summary Stats ###
-    st.markdown("<hr>", unsafe_allow_html=True)
-    st.markdown("### Highlights of our group pledge this month:")
-
-    stat_cols = st.columns(4, gap="small")
-    stats = [
-        ("Total Participants", f"{total_participants}"),
-        ("Total Winners", f"{total_winners}"),
-        ("Total Workouts", f"{total_workouts}"),
-        ("Approx Calories Burned", f"{total_calories:,} Cal"),
-    ]
-
-    for c, (label, value) in zip(stat_cols, stats):
-        with c:
-            st.markdown(
-                f"""
-                <div style='background: rgba(255,255,255,0.02); padding:14px; border-radius:8px; text-align:center;'>
-                  <div style='font-size:20px; font-weight:700; color:#fff;'>{value}</div>
-                  <div style='font-size:12px; color:#9aa0ab; margin-top:6px;'>{label}</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-    # Summary table with all participants
-    summary_table = lb.copy()
-    summary_table["Q/W%"] = (summary_table["qualifying_days"] / summary_table["workout_days"] * 100).round(1)
-    summary_table = summary_table[["name", "workout_days", "qualifying_days", "Q/W%"]].sort_values("name")
-    summary_table = summary_table.rename(columns={
-        "name": "Participant",
-        "workout_days": "# of Workouts [W]",
-        "qualifying_days": "# of Qualifying Workouts [Q]"
-    })
-    
-    st.markdown("<hr>", unsafe_allow_html=True)
-
-    # Month summary in a card-like container (matches other small cards)
-    with st.container(key="month_summary"):
-        # render_card_start(title="Monthly Summary")
-        st.markdown("### Monthly Individual Summary")
-        render_styled_table(summary_table)
-        render_card_end()
+    total_calories = int(lb.get("total_calories", pd.Series(dtype=int)).sum()) if not lb.empty else 0
 
     st.markdown("<hr>", unsafe_allow_html=True)
-    a, b, c = st.columns(3, gap="small")
+    with st.container(key="pledge_pulse"):
+        st.markdown("### Pledge Pulse")
 
-    with a:
-        with st.container(key="longest_streak"):
-            st.markdown("### Longest streak")
-            st.markdown("Day after day - Streak still alive")
-            if not streak_df.empty:
-                top = streak_df.iloc[0]
-                st.markdown(f"**Leader:** {top['Name']} — **{int(top['Longest Streak'])} days**")
-                render_styled_table(streak_df.head(12))
-            else:
-                st.caption("No qualifying streaks yet.")
-
-    with b:
-        with st.container(key="fastest_winner"):
-            st.markdown("### Fastest winner")
-            st.markdown("Wrapped it up while others were still planning !!")
-            if not fw_df.empty:
-                top = fw_df.iloc[0]
-                st.markdown(f"**Fastest:** {top['Name']} — cutoff on **{top['Hit cutoff on']}**")
-                render_styled_table(fw_df.head(12))
-            else:
-                st.caption("No winners yet (or not enough qualifying days).")
-
-    with c:
-        with st.container(key="lazy_logger"):
-            st.markdown("### Lazy logger ;)")
-            st.markdown("Trained like a beast - Logged like a sloth")
-            if lazy_df is not None and not lazy_df.empty:
-                lazy_show = lazy_df.rename(columns={"name":"Name", "avg_log_delay_days":"Avg. Log Delay (Days)"})
-                lazy_show["Avg. Log Delay (Days)"] = lazy_show["Avg. Log Delay (Days)"].round(2)
-                st.markdown(f"**Most delayed:** {lazy_show.iloc[0]['Name']} — avg **{lazy_show.iloc[0]['Avg. Log Delay (Days)']:.2f} days**")
-                render_styled_table(lazy_show.head(12))
-            else:
-                st.caption("Need timestamps to score logging delay.")
-
-    st.markdown("<hr>", unsafe_allow_html=True)
-    left, right = st.columns([1.2, 1.0], gap="small")
-
-    with left:
-        with st.container( key="front_loading"):
-            st.markdown("### Brick by Brick vs All-Nighters")
-            st.markdown("Tracks how effort was distributed across the month, from steady builds to final-week bursts.")
-            if not fl.empty:
-                render_styled_table(fl.rename(columns={"name":"Name","first_half":"First half","second_half":"Second half","style":"Style"}))
-
-                counts = (
-                    fl["style"]
-                    .dropna()
-                    .value_counts()
-                    .rename_axis("Style")
-                    .reset_index(name="People")
+        stat_cols = st.columns(4, gap="small")
+        stats = [
+            ("Total Participants", f"{total_participants}", "#6366F1"),
+            ("Total Winners", f"{total_winners}", "#10B981"),
+            ("Total Workouts", f"{total_workouts}", "#3B82F6"),
+            ("Calories Burned", f"{total_calories:,} Cal", "#F59E0B"),
+        ]
+        for col, (label, value, accent) in zip(stat_cols, stats, strict=False):
+            with col:
+                st.markdown(
+                    f"""
+                    <div style='
+                      background: rgba(28,36,60,0.96);
+                      border: 1px solid rgba(255,255,255,0.12);
+                      padding: 20px 16px;
+                      border-radius: 14px;
+                      text-align: center;
+                      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+                      border-top: 3px solid {accent};
+                    '>
+                      <div style='font-size:26px; font-weight:800; color:#fff; letter-spacing:-0.02em;'>{value}</div>
+                      <div style='font-size:12px; color:#9aa0ab; margin-top:8px; text-transform:uppercase; letter-spacing:0.06em;'>{label}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
                 )
 
-    with right:
-        with st.container( key="barely_missed"):
-            st.markdown("### Missed by a hair")
-            st.caption("Legends who missed the qualifying cutoff by 1 or 2 days.")
-            render_styled_table(barely_missed[["Name","Qualifying Days","Workouts Left","Workout Days"]])
-            st.markdown("### Building the Habit")    
-            st.caption("Strong consistency this month — qualifying days are the next unlock.")
-            render_styled_table(consistent_not_qual[["Name","Qualifying Days","Workouts Left","Workout Days"]])
+    st.markdown("<hr>", unsafe_allow_html=True)
+    with st.container(key="qualifying_progress"):
+        st.markdown("### Qualifying Progress Ladder")
+        if progress_df.empty:
+            st.caption("No participant progress to show yet.")
+        else:
+            st.altair_chart(
+                alt_goal_ladder_chart(
+                    progress_df,
+                    label_col="Name",
+                    qualifying_col="Qualifying Days",
+                    workout_col="Workout Days",
+                    cutoff=cutoff,
+                    height=max(420, min(920, 70 + len(progress_df) * 38)),
+                ),
+                use_container_width=True,
+            )
 
-    # Bubble plot: workouts by weekday (delegated to helper)
-    with st.container(key="weekday_bubble"):
-        title_col, filter_col = st.columns([3.2, 1.2], gap="large")
+    # ------------------------------------------------------------------
+    # Cumulative Calorie Race (April 2026 onward — earlier months had no
+    # calorie reporting, so silently no-op).
+    # ------------------------------------------------------------------
+    month_for_bounds = (
+        df_month["month"].dropna().iloc[0]
+        if df_month is not None
+        and not df_month.empty
+        and "month" in df_month.columns
+        and df_month["month"].notna().any()
+        else current_month_str()
+    )
+    has_calories = (
+        df_month is not None
+        and not df_month.empty
+        and "calories_burned" in df_month.columns
+        and df_month["calories_burned"].notna().any()
+        and str(month_for_bounds) >= "2026-04"
+    )
+
+    if has_calories:
+        start, end = month_bounds(str(month_for_bounds))
+        today = today_app()
+        # Cap at today so the line doesn't trail off into the future.
+        if today >= start:
+            end = min(end, today)
+        race_df = build_cumulative_calories_long(df_month, start_date=start, end_date=end)
+
+        if not race_df.empty:
+            st.markdown("<hr>", unsafe_allow_html=True)
+            with st.container(key="calorie_race"):
+                st.markdown("### Cumulative Calorie Race")
+                st.caption(
+                    "Each line is one participant's running calorie total over the month. "
+                    "Bold name + total at the end of each line marks the leader."
+                )
+                race_chart = alt_cumulative_calorie_race_chart(race_df, height=520)
+                if race_chart is not None:
+                    st.altair_chart(race_chart, use_container_width=True)
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+    with st.container(key="longest_streak"):
+        title_col, pick_col = st.columns([5, 2], gap="small", vertical_alignment="center")
+        with title_col:
+            st.markdown("### Longest Streak")
+        with pick_col:
+            streak_focus = _resolve_streak_focus(lb, streak_df)
+
+        if streak_focus is None:
+            st.caption("No participants available for streak tracking.")
+        else:
+            streak_wave_df = _build_streak_wave_df(df_month, streak_focus)
+            bg_streaks = _build_all_streaks_df(df_month, exclude_name=streak_focus)
+
+            if streak_wave_df.empty or int(streak_wave_df["Streak"].max()) == 0:
+                st.caption(f"{streak_focus} has not built a qualifying streak yet.")
+            else:
+                focus_peak = int(streak_wave_df["Streak"].max())
+                leader_note = ""
+                if not streak_df.empty:
+                    leader = streak_df.iloc[0]
+                    leader_note = f"Group leader: {leader['Name']} with {int(leader['Longest Streak'])} days."
+                st.markdown(f"**{streak_focus}** peaked at **{focus_peak} days**. {leader_note}".strip())
+                st.altair_chart(
+                    alt_streak_heartbeat_chart(
+                        streak_wave_df,
+                        day_col="Day",
+                        streak_col="Streak",
+                        qualifying_col="Qualifying",
+                        day_label_col="Day Label",
+                        month_days=month_days,
+                        background_streaks=bg_streaks if not bg_streaks.empty else None,
+                        height=360,
+                    ),
+                    use_container_width=True,
+                )
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+    with st.container(key="fastest_winner"):
+        st.markdown("### Fastest Winner")
+        st.caption("Top three to clinch the goal take the podium.")
+        if fastest_df.empty:
+            st.caption("No winners yet (or nobody has reached the cutoff in the selected month).")
+        else:
+            # Spacer so absolute-positioned medal badge on top of card has room.
+            st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
+            render_fastest_winner_podium(
+                fastest_df,
+                name_col="Name",
+                day_col="Clinch Day",
+                date_col="Hit cutoff on",
+                cutoff=cutoff,
+            )
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+    with st.container(key="lazy_logger"):
+        st.markdown("### Lazy Logger")
+        st.caption("Three zones, sorted left-to-right by how late participants log workouts. A bubble drifts between zones as someone's logging habit changes.")
+        if lazy_df is None or lazy_df.empty:
+            st.caption("Need timestamps to score logging delay.")
+        else:
+            packed = pack_lazy_bubbles(
+                lazy_df,
+                name_col="Name",
+                delay_col="Avg. Log Delay (Days)",
+                size_col="Logged Workouts",
+            )
+            render_lazy_bubble_clusters(
+                packed,
+                name_col="Name",
+                delay_col="Avg. Log Delay (Days)",
+                size_col="Logged Workouts",
+                card_height=480,
+            )
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+    with st.container(key="front_loading"):
+        st.markdown("### Brick by Brick vs All-Nighters")
+        st.caption("Left bars are first-half qualifying workouts. Right bars are second-half qualifying workouts. Balanced rows stay centered.")
+        if style_df.empty:
+            st.caption("No qualifying workouts yet for workout-style analysis.")
+        else:
+            st.altair_chart(
+                alt_group_split_chart(
+                    style_df,
+                    label_col="Name",
+                    left_col="First Half",
+                    right_col="Second Half",
+                    style_col="Style",
+                    height=max(360, min(880, 80 + len(style_df) * 34)),
+                ),
+                use_container_width=True,
+            )
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+    with st.container(key="weekday_cadence"):
+        title_col, pick_col = st.columns([5, 2], gap="small", vertical_alignment="center")
         with title_col:
             st.markdown("### Workouts by Day of the Week")
-            st.caption("Each bubble shows total workouts logged on that weekday (all workouts, not only qualifying).")
-        with filter_col:
-            candidate_options = sorted(df_month["name"].dropna().unique().tolist()) if df_month is not None else []
-            candidate_options = ["All"] + candidate_options
-            selected_candidate = st.selectbox(
-                "Filter by participant",
-                candidate_options,
-                index=0,
-                key="weekday_bubble_candidate",
-            )
-        if df_month is None or df_month.empty:
+        with pick_col:
+            radar_focus = _resolve_weekday_focus(lb)
+
+        st.caption("Left: the entire group's qualifying cadence. Right: the selected participant's. Each chart auto-scales to its own data so the participant's shape stays readable.")
+
+        if df_month is None or df_month.empty or radar_focus is None:
             st.caption("No workout data for the selected month.")
         else:
-            filtered = df_month if selected_candidate == "All" else df_month[df_month["name"] == selected_candidate]
-            try:
-                dates = pd.to_datetime(filtered["workout_date"])
-            except Exception:
-                dates = filtered["workout_date"]
+            group_counts = _build_qualifying_weekday_counts(df_month)
+            candidate_counts = _build_qualifying_weekday_counts(df_month, name=radar_focus)
 
-            wd = (
-                dates.dt.day_name().rename("Weekday").to_frame().assign(count=1)
+            group_fig = weekday_radar_figure(
+                weekday_order=WEEKDAY_ORDER,
+                group_qualifying=group_counts,
+                show_legend=False,
+            )
+            candidate_fig = weekday_radar_figure(
+                weekday_order=WEEKDAY_ORDER,
+                group_qualifying=[0] * len(WEEKDAY_ORDER),
+                candidate_qualifying=candidate_counts,
+                candidate_label=radar_focus,
+                show_legend=False,
             )
 
-            weekday_order = [
-                "Monday",
-                "Tuesday",
-                "Wednesday",
-                "Thursday",
-                "Friday",
-                "Saturday",
-                "Sunday",
-            ]
-            counts = (
-                wd.groupby("Weekday")["count"]
-                .sum()
-                .reindex(weekday_order, fill_value=0)
-                .rename_axis("Weekday")
-                .reset_index()
-            )
-            counts["Weekday"] = pd.Categorical(counts["Weekday"], categories=weekday_order, ordered=True)
-            counts = counts.sort_values("Weekday")
-
-            chart = alt_weekday_bubble(counts=counts, weekday_order=weekday_order)
-            st.altair_chart(chart, use_container_width=True)
+            left, right = st.columns(2, gap="medium")
+            with left:
+                st.markdown(
+                    "<div style='text-align:center;font-weight:700;color:#FFB57A;font-size:15px;margin-bottom:4px;letter-spacing:0.04em;text-transform:uppercase;'>Group</div>",
+                    unsafe_allow_html=True,
+                )
+                st.pyplot(group_fig, use_container_width=True)
+            with right:
+                st.markdown(
+                    f"<div style='text-align:center;font-weight:700;color:#5FE1C7;font-size:15px;margin-bottom:4px;letter-spacing:0.04em;text-transform:uppercase;'>{radar_focus}</div>",
+                    unsafe_allow_html=True,
+                )
+                st.pyplot(candidate_fig, use_container_width=True)

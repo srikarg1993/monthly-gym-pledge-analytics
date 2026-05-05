@@ -4,9 +4,16 @@ Streamlit dashboard for a monthly fitness pledge, backed by a Google Form and Go
 
 ## Features
 - Sidebar navigation: About us, Leaderboard, Scorecard, Log Your Workout
-- Leaderboard for the current month
-- Scorecard and month-specific views
+- Leaderboard for the current month with active-user backfill
+- Scorecard with modernized charts: qualifying progress ladder, cumulative calorie race, weekday cadence radar, longest streak heartbeat, Brick by Brick vs All-Nighter split, Lazy Logger bubble clusters
+- Year calendar heatmap and month-over-month trends
 - Workout logging CTA that opens the Google Form
+
+## Tests
+
+```bash
+pytest tests/
+```
 
 ## Setup
 1) Install dependencies:

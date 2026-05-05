@@ -19,6 +19,7 @@ USERS_STATUS_IN_VALUE = "In"
 
 
 WINNER_CUTOFF = 16
+MAX_CALORIES = 2200
 
 # Optional per-month cutoff overrides (YYYY-MM).
 # Keep WINNER_CUTOFF as the default for months not listed here.

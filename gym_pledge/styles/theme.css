@@ -593,3 +593,42 @@ button[title="Collapse sidebar"],
 [data-testid="collapsedControl"] {
   display: inline-flex !important;
 }
+
+.scorecard-chip-row{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.scorecard-chip{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(11,18,32,0.72);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.scorecard-chip-dot{
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+div[class^="st-key-longest_streak"] label,
+div[class*=" st-key-longest_streak"] label {
+  color: var(--muted) !important;
+  font-weight: 600;
+}
+
+div[class^="st-key-longest_streak"] div[data-baseweb="select"] > div,
+div[class*=" st-key-longest_streak"] div[data-baseweb="select"] > div {
+  background: rgba(11,18,32,0.72);
+  border-color: rgba(255,255,255,0.12);
+}

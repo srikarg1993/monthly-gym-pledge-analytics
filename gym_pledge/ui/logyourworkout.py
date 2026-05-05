@@ -41,5 +41,3 @@ def render():
         scrolling=False,
     )
 
-    # st.write("")  # spacing
-

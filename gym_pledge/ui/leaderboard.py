@@ -10,7 +10,6 @@ from html import escape
 import pandas as pd
 import streamlit as st
 
-
 from app_time import month_label, today_app
 
 
