@@ -1,0 +1,38 @@
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = [
+    "gym_pledge/00_Archive",
+    "gym_pledge/gym_kitty_analysis.ipynb",
+    ".venv",
+    "build",
+    "dist",
+]
+
+[tool.ruff.lint]
+# Pragmatic starter set — enable the high-signal rules without forcing a
+# big-bang cleanup of the existing codebase.
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "W",    # pycodestyle warnings
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # bugbear
+    "SIM",  # simplify
+]
+ignore = [
+    "E501",  # line length handled by formatter
+    "B008",  # function calls in argument defaults are common in Streamlit code
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E402"]  # tests insert sys.path before importing app modules
+"gym_pledge/dashboard.py" = ["E402"]  # dashboard tweaks sys.path-like state before imports
+
+[tool.ruff.lint.isort]
+known-first-party = ["app_time", "config", "data", "ui"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

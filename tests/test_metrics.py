@@ -114,7 +114,7 @@ def test_frontload_vs_cram():
         }
     )
     out = frontload_vs_cram(df)
-    styles = dict(zip(out["name"], out["style"]))
+    styles = dict(zip(out["name"], out["style"], strict=False))
     assert styles["Ann"] == "Front-loader"
     assert styles["Bob"] == "Crammer"
     assert styles["Cara"] == "Balanced"
@@ -163,7 +163,7 @@ def test_frontload_vs_cram_includes_non_qualifying_users():
         }
     )
     out = frontload_vs_cram(df)
-    styles = dict(zip(out["name"], out["style"]))
+    styles = dict(zip(out["name"], out["style"], strict=False))
     assert "Bob" in styles
     assert styles["Bob"] == "No qualifying"
     bob = out[out["name"] == "Bob"].iloc[0]

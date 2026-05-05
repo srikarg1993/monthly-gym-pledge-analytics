@@ -259,7 +259,7 @@ def render(*, df: pd.DataFrame, month_selected: str) -> None:
         ("Q / W %", f"{q_pct:.1f}%"),
         ("Longest qualifying streak (across full year)", f"{streak} days"),
     ]
-    for c, (label, value) in zip(stat_cols, stats):
+    for c, (label, value) in zip(stat_cols, stats, strict=False):
         with c:
             st.markdown(
                 f"""

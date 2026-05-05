@@ -87,3 +87,18 @@ Tests insert `gym_pledge/` onto `sys.path` themselves — no install step requir
 - Per-month cutoff changes go in `WINNER_CUTOFF_BY_MONTH`, not inline.
 - UI pages live under `gym_pledge/ui/` and are wired into the sidebar in `dashboard.py`.
 - There is currently no linter/formatter config — follow PEP 8, keep imports grouped stdlib / third-party / local.
+
+## Visual design language
+
+All scorecard charts share a unified dark visual language defined in `gym_pledge/ui/common.py`. New charts should follow it:
+
+- **Background**: `#0B1220` (set on `.properties(background=...)` and `configure_view(fill=...)`).
+- **Accent palette**:
+  - Mint `#5FE1C7` (dark `#1F8C7A`) — winners, candidate, "on it", first half / Brick by Brick, front-loader.
+  - Coral `#FFB57A` (dark `#C77744`) — group, in-progress, "catching up", second half / All-Nighter.
+  - Cool blue `#9DCEFF` — neutral markers, balanced style.
+  - Raspberry `#F47A8E` — falling behind, crammer.
+- **Glow stack**: Bars/lines get a wider semi-transparent underlay in the darker shade, with a crisp narrower mark in the bright accent on top. Dots use a halo + core pair.
+- **Label "chip" effect**: Render a dark stroke-only mark first (`color="#0B1220" stroke="#0B1220" strokeWidth=4 strokeOpacity=0.9`), then the colored fill mark on top with no stroke. Don't combine fill+stroke on one mark — Vega-Lite paints the stroke over the fill and small text becomes muddy.
+- **Medal emojis** 🥇🥈🥉 prepended to the top three rows on ranked charts.
+- **Lazy Logger zones** are defined as 6-tuples `(zone_id, label, headline, subtitle, color, icon)` in `LAZY_ZONES`. SVG bubbles use `<radialGradient>` + `<feGaussianBlur>` glow filter.

@@ -1,0 +1,6 @@
+# Dev / test dependencies layered on top of requirements.txt.
+# Install with: uv pip install -r requirements.txt -r requirements-dev.txt
+-r requirements.txt
+pytest==9.0.3
+ruff==0.14.4
+pre-commit==4.4.0

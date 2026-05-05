@@ -9,17 +9,19 @@ from data.metrics import (
     month_bounds,
 )
 from ui.common import (
-    alt_goal_gap_chart,
+    alt_cumulative_calorie_race_chart,
     alt_goal_ladder_chart,
     alt_group_split_chart,
-    alt_race_lane_chart,
     alt_streak_heartbeat_chart,
-    alt_weekday_cadence_chart,
-    alt_delay_runway_chart,
+    build_cumulative_calories_long,
+    pack_lazy_bubbles,
+    render_fastest_winner_podium,
+    render_lazy_bubble_clusters,
+    weekday_radar_figure,
 )
 
-
 STREAK_KEY = "scorecard_streak_participant"
+WEEKDAY_RADAR_KEY = "scorecard_weekday_radar_participant"
 STATUS_ORDER = ["Winner", "1-2 away", "Workout-rich", "Other"]
 STATUS_COLORS = {
     "Winner": "#5FA68D",
@@ -156,15 +158,18 @@ def _resolve_streak_focus(lb: pd.DataFrame, streak_df: pd.DataFrame) -> str | No
     if not people:
         return None
 
-    current_focus = st.session_state.get(STREAK_KEY)
-    if current_focus not in people:
-        if not streak_df.empty:
-            current_focus = str(streak_df.iloc[0]["Name"])
-        else:
-            current_focus = people[0]
-        st.session_state[STREAK_KEY] = current_focus
+    # Seed session state exactly once so Streamlit owns the value going forward.
+    # Avoids "widget created with a default value but also had its value set via
+    # the Session State API" warning by NOT also passing `index=` to the widget.
+    if st.session_state.get(STREAK_KEY) not in people:
+        st.session_state[STREAK_KEY] = str(streak_df.iloc[0]["Name"]) if not streak_df.empty else people[0]
 
-    return st.selectbox("Choose participant", people, index=people.index(current_focus), key=STREAK_KEY, label_visibility="collapsed")
+    return st.selectbox(
+        "Choose participant",
+        people,
+        key=STREAK_KEY,
+        label_visibility="collapsed",
+    )
 
 
 def _build_all_streaks_df(df_month: pd.DataFrame, exclude_name: str | None = None) -> pd.DataFrame:
@@ -303,10 +308,86 @@ def _build_style_balance_df(fl: pd.DataFrame) -> pd.DataFrame:
         }
     ).copy()
     out["Balance"] = out["Second Half"] - out["First Half"]
-    return out.sort_values(["Balance", "Name"], ascending=[True, True]).reset_index(drop=True)
+    out["Total"] = out["First Half"] + out["Second Half"]
+
+    # Desired chart order (top -> bottom):
+    #   1. Front-loaders, sorted by First Half DESC (most front-loaded at top).
+    #   2. Balanced, sorted by Total DESC (most active balanced row higher).
+    #   3. Crammers, sorted by Second Half ASC (least crammed first, most
+    #      crammed at the very bottom).
+    style_rank = {"Front-loader": 0, "Balanced": 1, "Crammer": 2}
+    out["_style_rank"] = out["Style"].map(style_rank).fillna(99).astype(int)
+
+    # Within-group sort keys. We negate columns we want DESC so a single
+    # ascending sort produces the right order.
+    out["_within_key"] = 0.0
+    front_mask = out["Style"] == "Front-loader"
+    bal_mask = out["Style"] == "Balanced"
+    cram_mask = out["Style"] == "Crammer"
+    out.loc[front_mask, "_within_key"] = -out.loc[front_mask, "First Half"].astype(float)
+    out.loc[bal_mask, "_within_key"] = -out.loc[bal_mask, "Total"].astype(float)
+    out.loc[cram_mask, "_within_key"] = out.loc[cram_mask, "Second Half"].astype(float)
+
+    out = out.sort_values(
+        ["_style_rank", "_within_key", "Name"],
+        ascending=[True, True, True],
+    ).reset_index(drop=True)
+
+    # Altair's categorical y-axis with `sort=` argument keeps the dataframe's
+    # order top-to-bottom, so the first row in `out` becomes the topmost row
+    # in the chart. No reversal needed.
+    return out.drop(columns=["_style_rank", "_within_key", "Total"])
+
+
+def _build_qualifying_weekday_counts(df_month: pd.DataFrame, *, name: str | None = None) -> list[int]:
+    """Return qualifying-workout counts per weekday in WEEKDAY_ORDER order.
+
+    Filters to ``burnt_250 == True`` rows; if ``name`` is provided, scopes to
+    that participant. Always returns a list of length 7 with ints (0 for any
+    weekday with no qualifying workouts), so the radar always closes cleanly.
+    """
+    if df_month is None or df_month.empty:
+        return [0] * len(WEEKDAY_ORDER)
+
+    scoped = df_month[df_month["burnt_250"]]
+    if name is not None:
+        scoped = scoped[scoped["name"].astype(str) == str(name)]
+    if scoped.empty:
+        return [0] * len(WEEKDAY_ORDER)
+
+    counts = (
+        pd.to_datetime(scoped["workout_date"], errors="coerce")
+        .dt.day_name()
+        .value_counts()
+        .reindex(WEEKDAY_ORDER, fill_value=0)
+    )
+    return [int(v) for v in counts.tolist()]
+
+
+def _resolve_weekday_focus(lb: pd.DataFrame) -> str | None:
+    """Selectbox-driven candidate picker for the weekday radar."""
+    people = sorted(lb["name"].dropna().astype(str).unique().tolist()) if lb is not None and not lb.empty else []
+    if not people:
+        return None
+
+    # Seed exactly once so Streamlit owns the value (avoids the "default value
+    # but also had its value set via Session State" warning).
+    if st.session_state.get(WEEKDAY_RADAR_KEY) not in people:
+        st.session_state[WEEKDAY_RADAR_KEY] = people[0]
+
+    return st.selectbox(
+        "Choose participant",
+        people,
+        key=WEEKDAY_RADAR_KEY,
+        label_visibility="collapsed",
+    )
 
 
 def _build_weekday_mix_df(df_month: pd.DataFrame) -> pd.DataFrame:
+    """Deprecated builder retained for backward compatibility (returned all-vs-
+    qualifying weekday counts for the legacy bar+line chart). The current
+    radar uses :func:`_build_qualifying_weekday_counts` instead.
+    """
     if df_month is None or df_month.empty:
         return pd.DataFrame(
             {
@@ -352,8 +433,6 @@ def render(*, lb, df_month, cutoff: int) -> None:
     fastest_df, month_days = _build_fastest_winner_df(df_month, cutoff)
     lazy_df = _build_lazy_df(df_month)
     style_df = _build_style_balance_df(frontload_vs_cram(df_month))
-    close_calls, workout_rich = _build_close_call_data(lb, cutoff)
-    weekday_mix = _build_weekday_mix_df(df_month)
 
     st.markdown("### This month's winners!! ")
     st.markdown("Congratulations guys!! Each one of you burnt 4000 + calories this month.")
@@ -392,7 +471,7 @@ def render(*, lb, df_month, cutoff: int) -> None:
             ("Total Workouts", f"{total_workouts}", "#3B82F6"),
             ("Calories Burned", f"{total_calories:,} Cal", "#F59E0B"),
         ]
-        for col, (label, value, accent) in zip(stat_cols, stats):
+        for col, (label, value, accent) in zip(stat_cols, stats, strict=False):
             with col:
                 st.markdown(
                     f"""
@@ -429,6 +508,46 @@ def render(*, lb, df_month, cutoff: int) -> None:
                 ),
                 use_container_width=True,
             )
+
+    # ------------------------------------------------------------------
+    # Cumulative Calorie Race (April 2026 onward — earlier months had no
+    # calorie reporting, so silently no-op).
+    # ------------------------------------------------------------------
+    month_for_bounds = (
+        df_month["month"].dropna().iloc[0]
+        if df_month is not None
+        and not df_month.empty
+        and "month" in df_month.columns
+        and df_month["month"].notna().any()
+        else current_month_str()
+    )
+    has_calories = (
+        df_month is not None
+        and not df_month.empty
+        and "calories_burned" in df_month.columns
+        and df_month["calories_burned"].notna().any()
+        and str(month_for_bounds) >= "2026-04"
+    )
+
+    if has_calories:
+        start, end = month_bounds(str(month_for_bounds))
+        today = today_app()
+        # Cap at today so the line doesn't trail off into the future.
+        if today >= start:
+            end = min(end, today)
+        race_df = build_cumulative_calories_long(df_month, start_date=start, end_date=end)
+
+        if not race_df.empty:
+            st.markdown("<hr>", unsafe_allow_html=True)
+            with st.container(key="calorie_race"):
+                st.markdown("### Cumulative Calorie Race")
+                st.caption(
+                    "Each line is one participant's running calorie total over the month. "
+                    "Bold name + total at the end of each line marks the leader."
+                )
+                race_chart = alt_cumulative_calorie_race_chart(race_df, height=520)
+                if race_chart is not None:
+                    st.altair_chart(race_chart, use_container_width=True)
 
     st.markdown("<hr>", unsafe_allow_html=True)
     with st.container(key="longest_streak"):
@@ -470,44 +589,39 @@ def render(*, lb, df_month, cutoff: int) -> None:
     st.markdown("<hr>", unsafe_allow_html=True)
     with st.container(key="fastest_winner"):
         st.markdown("### Fastest Winner")
-        st.caption("Each lane runs from day 1 to the moment a winner crossed the goal line. Everyone who finished is shown.")
+        st.caption("Top three to clinch the goal take the podium.")
         if fastest_df.empty:
             st.caption("No winners yet (or nobody has reached the cutoff in the selected month).")
         else:
-            top = fastest_df.iloc[0]
-            st.markdown(f"**Earliest finisher:** {top['Name']} on **{top['Hit cutoff on']}**")
-            st.altair_chart(
-                alt_race_lane_chart(
-                    fastest_df,
-                    label_col="Name",
-                    finish_col="Clinch Day",
-                    total_days=month_days,
-                    finish_label_col="Finish Label",
-                    height=max(280, min(760, 60 + len(fastest_df) * 34)),
-                ),
-                use_container_width=True,
+            # Spacer so absolute-positioned medal badge on top of card has room.
+            st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
+            render_fastest_winner_podium(
+                fastest_df,
+                name_col="Name",
+                day_col="Clinch Day",
+                date_col="Hit cutoff on",
+                cutoff=cutoff,
             )
 
     st.markdown("<hr>", unsafe_allow_html=True)
     with st.container(key="lazy_logger"):
         st.markdown("### Lazy Logger")
-        st.caption("Each bubble sits in the zone matching its average logging delay. Bigger bubbles mean more logged workouts.")
+        st.caption("Three zones, sorted left-to-right by how late participants log workouts. A bubble drifts between zones as someone's logging habit changes.")
         if lazy_df is None or lazy_df.empty:
             st.caption("Need timestamps to score logging delay.")
         else:
-            n = len(lazy_df)
-            max_zone = max(n // 3, 1)
-            chart_h = max(340, min(760, max_zone * 90 + 120))
-            st.altair_chart(
-                alt_delay_runway_chart(
-                    lazy_df,
-                    label_col="Name",
-                    delay_col="Avg. Log Delay (Days)",
-                    size_col="Logged Workouts",
-                    label_value_col="Avg. Log Delay (Days)",
-                    height=chart_h,
-                ),
-                use_container_width=True,
+            packed = pack_lazy_bubbles(
+                lazy_df,
+                name_col="Name",
+                delay_col="Avg. Log Delay (Days)",
+                size_col="Logged Workouts",
+            )
+            render_lazy_bubble_clusters(
+                packed,
+                name_col="Name",
+                delay_col="Avg. Log Delay (Days)",
+                size_col="Logged Workouts",
+                card_height=480,
             )
 
     st.markdown("<hr>", unsafe_allow_html=True)
@@ -530,59 +644,44 @@ def render(*, lb, df_month, cutoff: int) -> None:
             )
 
     st.markdown("<hr>", unsafe_allow_html=True)
-    with st.container(key="close_calls"):
-        st.markdown("### Missed by a Hair")
-        st.caption("This view zooms in around the goal line so the gap, not the full month, gets the visual emphasis.")
-        if close_calls.empty:
-            st.caption("Nobody finished just one or two days short this month.")
-        else:
-            st.altair_chart(
-                alt_goal_gap_chart(
-                    close_calls,
-                    label_col="Name",
-                    qualifying_col="Qualifying Days",
-                    gap_col="Days to Cutoff",
-                    cutoff=cutoff,
-                    lower_bound=max(cutoff - 3, 0),
-                    height=max(240, min(480, 60 + len(close_calls) * 34)),
-                ),
-                use_container_width=True,
-            )
-
-        st.markdown("### Building the Habit")
-        st.caption("These participants showed up often enough. The gap chart shows how many qualifying days still separate them from the line.")
-        if workout_rich.empty:
-            st.caption("No workout-rich participants are sitting below the cutoff this month.")
-        else:
-            lower_bound = max(min(int(workout_rich["Qualifying Days"].min()) - 1, cutoff - 2), 0)
-            st.altair_chart(
-                alt_goal_gap_chart(
-                    workout_rich,
-                    label_col="Name",
-                    qualifying_col="Qualifying Days",
-                    gap_col="Days to Cutoff",
-                    cutoff=cutoff,
-                    lower_bound=lower_bound,
-                    height=max(240, min(520, 60 + len(workout_rich) * 34)),
-                ),
-                use_container_width=True,
-            )
-
-    st.markdown("<hr>", unsafe_allow_html=True)
     with st.container(key="weekday_cadence"):
-        st.markdown("### Workouts by Day of the Week")
-        st.caption("Steel bars show all logged workouts. The sage line shows how many of those were qualifying workouts.")
-        if df_month is None or df_month.empty:
+        title_col, pick_col = st.columns([5, 2], gap="small", vertical_alignment="center")
+        with title_col:
+            st.markdown("### Workouts by Day of the Week")
+        with pick_col:
+            radar_focus = _resolve_weekday_focus(lb)
+
+        st.caption("Left: the entire group's qualifying cadence. Right: the selected participant's. Each chart auto-scales to its own data so the participant's shape stays readable.")
+
+        if df_month is None or df_month.empty or radar_focus is None:
             st.caption("No workout data for the selected month.")
         else:
-            st.altair_chart(
-                alt_weekday_cadence_chart(
-                    weekday_mix,
-                    weekday_col="Weekday",
-                    total_col="All Workouts",
-                    qualifying_col="Qualifying Workouts",
-                    weekday_order=WEEKDAY_ORDER,
-                    height=320,
-                ),
-                use_container_width=True,
+            group_counts = _build_qualifying_weekday_counts(df_month)
+            candidate_counts = _build_qualifying_weekday_counts(df_month, name=radar_focus)
+
+            group_fig = weekday_radar_figure(
+                weekday_order=WEEKDAY_ORDER,
+                group_qualifying=group_counts,
+                show_legend=False,
             )
+            candidate_fig = weekday_radar_figure(
+                weekday_order=WEEKDAY_ORDER,
+                group_qualifying=[0] * len(WEEKDAY_ORDER),
+                candidate_qualifying=candidate_counts,
+                candidate_label=radar_focus,
+                show_legend=False,
+            )
+
+            left, right = st.columns(2, gap="medium")
+            with left:
+                st.markdown(
+                    "<div style='text-align:center;font-weight:700;color:#FFB57A;font-size:15px;margin-bottom:4px;letter-spacing:0.04em;text-transform:uppercase;'>Group</div>",
+                    unsafe_allow_html=True,
+                )
+                st.pyplot(group_fig, use_container_width=True)
+            with right:
+                st.markdown(
+                    f"<div style='text-align:center;font-weight:700;color:#5FE1C7;font-size:15px;margin-bottom:4px;letter-spacing:0.04em;text-transform:uppercase;'>{radar_focus}</div>",
+                    unsafe_allow_html=True,
+                )
+                st.pyplot(candidate_fig, use_container_width=True)

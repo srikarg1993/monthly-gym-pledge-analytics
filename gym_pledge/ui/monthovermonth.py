@@ -12,7 +12,7 @@ from app_time import current_month_str
 from config.globals import winner_cutoff_for_month
 from data.metrics import month_leaderboard
 from data.source import get_users
-from ui.common import render_card_start, render_card_end, render_styled_table
+from ui.common import render_styled_table
 
 
 def _month_label(month_str: str) -> str:

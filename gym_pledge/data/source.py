@@ -1,20 +1,20 @@
 """Data source helpers: reading and cleaning raw sheet data."""
 
 from datetime import datetime
-from typing import List, Optional
 
 import gspread
 import pandas as pd
 import streamlit as st
 from google.oauth2.service_account import Credentials
+
 from config.globals import (
+    MAX_CALORIES,
     SCOPES,
     SPREADSHEET_ID,
-    WORKSHEET_NAME,
-    USERS_WORKSHEET_NAME,
     USERS_NAME_COLUMN,
     USERS_STATUS_IN_VALUE,
-    MAX_CALORIES,
+    USERS_WORKSHEET_NAME,
+    WORKSHEET_NAME,
 )
 
 
@@ -45,7 +45,7 @@ def _month_label(month_str: str) -> str:
 
 
 @st.cache_data(ttl=60, show_spinner=False)
-def get_users(month_str: Optional[str] = None) -> Optional[List[str]]:
+def get_users(month_str: str | None = None) -> list[str] | None:
     try:
         users_df = read_google_sheet_as_df(SPREADSHEET_ID, USERS_WORKSHEET_NAME)
     except Exception as e:
@@ -179,4 +179,4 @@ def get_data() -> pd.DataFrame:
         st.stop()
 
     return df
-    
+

@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
 import streamlit as st
 
-
 PLEDGE_AMOUNT = 10
 QUALIFYING_DAYS = 16
 DAILY_CALORIE_TARGET = 250

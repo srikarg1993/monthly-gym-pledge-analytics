@@ -136,10 +136,7 @@ st.markdown("<hr>", unsafe_allow_html=True)
 
 # Choose leaderboard month: always use current month for the Leaderboard tab
 tab = st.session_state.get("tab", "Leaderboard")
-if tab == "Leaderboard":
-    lb_month = current_month_str()
-else:
-    lb_month = month_selected
+lb_month = current_month_str() if tab == "Leaderboard" else month_selected
 
 users = get_users(lb_month)
 lb_cutoff = winner_cutoff_for_month(lb_month)
