@@ -184,6 +184,7 @@ the task before improvising:
 - `docs/skills/ui-page.md` — adding a new sidebar page.
 - `docs/skills/testing.md` — writing tests, fixtures, and coverage expectations.
 - `docs/skills/commit-messages.md` — writing high-signal git commit messages.
+- `docs/skills/ci-workflows.md` — adding or modifying GitHub Actions workflows.
 
 ---
 

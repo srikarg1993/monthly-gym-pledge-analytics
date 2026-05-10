@@ -65,13 +65,38 @@ no cold-start, multi-region, OAuth gating, more memory/CPU.
 
 ### Tier 2 — nice to have
 
-- [ ] **Secret scanning + push protection**: enable in Settings → Security.
-- [ ] **Coverage badge in README**: wire up Codecov or Coveralls.
-- [ ] **Auto-format bot**: action that runs `ruff format` and pushes a
-      fixup commit.
-- [ ] **Stale issue/PR sweeper**: `actions/stale` with N-day window.
-- [ ] **release-please / changesets**: auto-changelog + tag from
-      conventional commits (matches `docs/skills/commit-messages.md`).
+- [ ] **Secret scanning + push protection**: enable in repo Settings →
+      Code security and analysis. **Action for repo owner**:
+      1. Go to https://github.com/srikarg1993/monthly-gym-pledge-analytics/settings/security_analysis
+      2. Toggle on:
+         - **Secret scanning** (free for public repos)
+         - **Push protection** — blocks pushes that contain known token formats
+         - **Private vulnerability reporting**
+         - **Dependency graph** + **Dependabot alerts** if not already on
+      3. No code change required. Once enabled, GitHub scans every push and
+         past commits for ~200 token formats (AWS, GCP, Stripe, Slack, etc.)
+         and blocks new ones at push time.
+- [x] **Coverage badge in README**: `ci.yml` now uploads `coverage.xml` to
+      Codecov via `codecov/codecov-action@v4`. Badge added to `README.md`.
+      First upload happens on next push to `main`. **Action for repo owner**
+      (only if Codecov says "no token"): visit
+      https://app.codecov.io/gh/srikarg1993 and authorize the repo (free
+      for public repos, no token needed for uploads).
+- [ ] **Auto-format bot**: install [pre-commit.ci](https://pre-commit.ci)
+      as a GitHub App (one click, free for public repos). It auto-runs
+      every hook on every PR and pushes a fixup commit if `ruff format` /
+      `end-of-file-fixer` would change anything. No workflow file needed —
+      replaces the local `pre-commit` job in `ci.yml` once installed.
+      **Action for repo owner**: visit https://pre-commit.ci, sign in with
+      GitHub, click "Add" next to this repo.
+- [x] **Stale issue/PR sweeper**: `.github/workflows/stale.yml` runs
+      daily at 09:00 UTC. Issues warn at 60 days idle / close at 74; PRs
+      warn at 30 / close at 44. Exempt labels: `security`, `pinned`,
+      `roadmap`, `WIP`, plus all draft PRs.
+- [ ] **release-please / changesets**: deferred. This repo has no formal
+      release cadence (every push to `main` deploys to Streamlit Cloud, no
+      versioned artifacts). Revisit if we ever publish a Python package
+      or tag releases manually.
 
 ### Tier 3 — only if app grows
 

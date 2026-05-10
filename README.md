@@ -1,5 +1,11 @@
 # Monthly Gym Pledge Analytics
 
+[![ci](https://github.com/srikarg1993/monthly-gym-pledge-analytics/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/srikarg1993/monthly-gym-pledge-analytics/actions/workflows/ci.yml)
+[![codeql](https://github.com/srikarg1993/monthly-gym-pledge-analytics/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/srikarg1993/monthly-gym-pledge-analytics/actions/workflows/codeql.yml)
+[![codecov](https://codecov.io/gh/srikarg1993/monthly-gym-pledge-analytics/branch/main/graph/badge.svg)](https://codecov.io/gh/srikarg1993/monthly-gym-pledge-analytics)
+[![python](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
+[![ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+
 Streamlit dashboard for a monthly fitness pledge, backed by a Google Form and Google Sheet.
 
 > AI agents working on this repo: read [`agents.md`](agents.md) first. It captures the project's hard rules, layering, visual design language, and skill index.
