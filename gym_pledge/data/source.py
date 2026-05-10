@@ -7,6 +7,7 @@ import pandas as pd
 import streamlit as st
 from google.oauth2.service_account import Credentials
 
+from app_time import today_app
 from config.globals import (
     MAX_CALORIES,
     MIN_WORKOUT_DATE,
@@ -17,7 +18,6 @@ from config.globals import (
     USERS_WORKSHEET_NAME,
     WORKSHEET_NAME,
 )
-from gym_pledge.app_time import today_app
 
 
 @st.cache_data(ttl=60, show_spinner=False)

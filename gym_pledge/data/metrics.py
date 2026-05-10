@@ -10,7 +10,7 @@ from datetime import date
 
 import pandas as pd
 
-from gym_pledge.app_time import today_app
+from app_time import today_app
 
 
 def month_leaderboard(df: pd.DataFrame, month_str: str, cutoff: int, all_users=None) -> pd.DataFrame:
