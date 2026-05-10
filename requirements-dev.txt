@@ -5,6 +5,3 @@ pytest==9.0.3
 pytest-cov==7.0.0
 ruff==0.14.4
 pre-commit==4.4.0
-# Mutation testing (see docs/skills/mutation-testing.md). Pinned <3 because
-# v3 is WSL-only on Windows: https://github.com/boxed/mutmut/issues/397
-mutmut<3

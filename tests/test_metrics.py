@@ -183,3 +183,86 @@ def test_frontload_vs_cram_all_non_qualifying():
     out = frontload_vs_cram(df)
     assert set(out["name"]) == {"Ann", "Bob"}
     assert set(out["style"]) == {"No qualifying"}
+
+
+# ---------------------------------------------------------------------------
+# Mutant-killing tests for month_leaderboard.
+#
+# Background: a 2026-05-09 mutmut pass on data/metrics.py reported 7 surviving
+# mutations in month_leaderboard — changes to the source that the existing test
+# suite did not detect. The three tests below close those gaps.
+# ---------------------------------------------------------------------------
+
+
+def test_month_leaderboard_excludes_other_months_and_nat_dates():
+    """Filter must require BOTH month match AND non-NaT workout_date.
+
+    Kills the mutation that flips `&` to `|` in the row filter, which would
+    leak in rows from other months and rows with NaT workout dates.
+    """
+    df = pd.DataFrame(
+        {
+            "name": ["Ann", "Ann", "Bob", "Cara"],
+            "workout_date": [
+                date(2024, 1, 1),
+                date(2024, 2, 1),  # wrong month, should be excluded
+                pd.NaT,  # NaT, should be excluded
+                date(2024, 1, 5),
+            ],
+            "burnt_250": [True, True, True, True],
+            "month": ["2024-01", "2024-02", "2024-01", "2024-01"],
+            "calories_burned": [300, 300, 300, 300],
+        }
+    )
+    out = month_leaderboard(df, "2024-01", cutoff=2)
+    # Bob (NaT) and Ann's Feb row are dropped, so only Ann + Cara appear,
+    # each with exactly one workout day.
+    assert set(out["name"]) == {"Ann", "Cara"}
+    assert int(out[out["name"] == "Ann"].iloc[0]["workout_days"]) == 1
+    assert int(out[out["name"] == "Cara"].iloc[0]["workout_days"]) == 1
+
+
+def test_month_leaderboard_user_with_no_qualifying_no_all_users():
+    """A user with workouts but zero qualifying days reports 0, not 1.
+
+    Kills the mutation that changes `fillna(0)` to `fillna(1)` on
+    qualifying_days. Without `all_users`, there is no second fillna pass
+    to mask the bug, so the value flows straight into workouts_left.
+    """
+    df = pd.DataFrame(
+        {
+            "name": ["Ann", "Cara", "Cara"],
+            "workout_date": [date(2024, 1, 1), date(2024, 1, 2), date(2024, 1, 3)],
+            "burnt_250": [True, False, False],  # Cara has workouts but none qualify
+            "month": ["2024-01"] * 3,
+            "calories_burned": [300, 100, 100],
+        }
+    )
+    out = month_leaderboard(df, "2024-01", cutoff=2)  # NO all_users on purpose
+    cara = out[out["name"] == "Cara"].iloc[0]
+    assert int(cara["workout_days"]) == 2
+    assert int(cara["qualifying_days"]) == 0
+    assert int(cara["workouts_left"]) == 2
+    assert bool(cara["is_winner"]) is False
+
+
+def test_month_leaderboard_exact_column_set():
+    """Output schema is exactly the documented set of columns.
+
+    Kills mutations that rename a column-assignment target to a placeholder
+    identifier (e.g. `out["qualifying_days"]` → `out["XXqualifying_daysXX"]`).
+    Such a mutation creates a stray column that downstream value assertions
+    don't notice, but a strict set comparison catches immediately.
+    """
+    df = _df_for_month()
+    out = month_leaderboard(df, "2024-01", cutoff=2, all_users=["Ann", "Bob", "Cara"])
+    assert set(out.columns) == {
+        "name",
+        "workout_days",
+        "qualifying_days",
+        "total_calories",
+        "workouts_left",
+        "is_winner",
+        "progress",
+        "rank",
+    }

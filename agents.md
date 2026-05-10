@@ -183,7 +183,6 @@ the task before improvising:
 - `docs/skills/data-loading.md` — touching Google Sheets I/O, caching, or `clean()`.
 - `docs/skills/ui-page.md` — adding a new sidebar page.
 - `docs/skills/testing.md` — writing tests, fixtures, and coverage expectations.
-- `docs/skills/mutation-testing.md` — finding fake-green tests with mutmut.
 - `docs/skills/commit-messages.md` — writing high-signal git commit messages.
 - `docs/skills/ci-workflows.md` — adding or modifying GitHub Actions workflows.
 
@@ -227,13 +226,28 @@ the task before improvising:
 
 These rules apply to **every** AI agent working in this repo. Non-negotiable.
 
-### Parallelize aggressively
-- Prefer **subagents** (e.g. an `Explore` agent) for any task with
-  independent sub-parts. One subagent per audit dimension.
-- When tools are independent (search + fetch + read), call them in a
-  **single** parallel tool block — never one after the other.
-- Linear sequences of `read_file` / `grep_search` calls are a smell;
-  combine or hand off to a subagent.
+### Rule 0 — PARALLEL BY DEFAULT (hard rule)
+
+The single highest-priority operating constraint. The user has stated this
+is mandatory and non-negotiable.
+
+- **Default to multiple agents/tools running concurrently.** Linear
+  single-tool work is a smell to be justified, not the norm.
+- For ANY task touching more than one file, more than one concern, or
+  more than one open question: **dispatch parallel `Explore` subagents**
+  — one per concern — in a single tool block.
+- For ANY pre-commit gate: dispatch the four audit dimensions (format/lint,
+  code quality, logic errors, doc updates) as **parallel** subagents,
+  never sequentially.
+- Independent reads (`read_file`, `grep_search`, `file_search`,
+  `fetch_webpage`) MUST be issued in a single parallel tool block,
+  never one after the other.
+- If you find yourself about to issue a second sequential `read_file` /
+  `grep_search` / subagent call, stop and bundle it with whatever else
+  is independent.
+- The only acceptable reason to go sequential: the second call genuinely
+  depends on the first call's output. Document that dependency in the
+  surrounding text.
 
 ### Pre-commit gate (run before EVERY commit + push)
 Fan out the following in parallel — usually one subagent per item — and only

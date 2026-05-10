@@ -21,7 +21,7 @@ Streamlit dashboard for a monthly fitness pledge, backed by a Google Form and Go
 - [`agents.md`](agents.md) — system prompt for any AI agent
 - [`docs/adr/`](docs/adr/) — Architectural Decision Records
 - [`docs/skills/`](docs/skills/) — task-specific recipes (charts, metrics, data loading, UI page, testing)
-- [`CLAUDE.md`](CLAUDE.md) — Claude-specific guidance (mirror of `agents.md` essentials)
+- [`CLAUDE.md`](CLAUDE.md) — stub that redirects Claude Code to `agents.md`
 
 ## Tests
 

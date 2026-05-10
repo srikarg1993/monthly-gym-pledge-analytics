@@ -28,13 +28,6 @@ in a UI module.
   are).
 - Chart specs in `ui/common.py` are not snapshot-tested.
 
-## Beyond coverage: mutation testing
-
-Coverage tells you "did this line run?". Mutation testing tells you "would
-my test catch a bug here?". Run periodically (not in CI) — see
-[`docs/skills/mutation-testing.md`](mutation-testing.md) for the full
-recipe.
-
 ## What every new `data/*` function needs
 
 1. **Happy path**: realistic DataFrame with 2-4 names, multiple dates,
