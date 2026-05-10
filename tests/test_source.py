@@ -119,7 +119,8 @@ def test_clean_without_calories_column():
     assert pd.isna(out.iloc[0]["calories_met_250"])
 
 
-def test_clean_unparseable_workout_date_yields_na_month():
+def test_clean_drops_unparseable_workout_date():
+    """Rows with NaT workout_date are dropped (every metric bins by date)."""
     df = pd.DataFrame(
         {
             "Timestamp": ["2024-01-05 08:00:00", "2024-01-06 09:00:00"],
@@ -129,6 +130,135 @@ def test_clean_unparseable_workout_date_yields_na_month():
         }
     )
     out = clean(df, dedupe=False)
-    bob_month = out[out["name"] == "Bob"].iloc[0]["month"]
-    assert pd.isna(bob_month)
-    assert "NaT" not in set(out["month"].dropna().unique())
+    assert set(out["name"]) == {"Ann"}
+    assert out["month"].notna().all()
+
+
+def test_clean_drops_future_dated_rows(monkeypatch):
+    """Future-dated workouts (typos in the form) must be dropped at import."""
+    from datetime import date
+
+    import data.source as source_mod
+
+    monkeypatch.setattr(source_mod, "today_app", lambda: date(2024, 1, 10))
+
+    df = pd.DataFrame(
+        {
+            "Timestamp": [
+                "2024-01-05 08:00:00",
+                "2024-01-10 08:00:00",
+                "2024-01-31 08:00:00",
+            ],
+            "You are?": ["Ann", "Bob", "Cara"],
+            "Workout date": ["2024-01-03", "2024-01-10", "2024-01-31"],
+            "Burnt >= 250 calories?": ["yes", "yes", "yes"],
+        }
+    )
+    out = clean(df, dedupe=False)
+    names = set(out["name"])
+    # Today and earlier kept; strictly future date dropped.
+    assert names == {"Ann", "Bob"}
+    assert "Cara" not in names
+
+
+def test_clean_drops_implausibly_old_workout_dates():
+    """Workout dates before MIN_WORKOUT_DATE (2024-01-01) are typos."""
+    df = pd.DataFrame(
+        {
+            "Timestamp": [
+                "2024-02-01 08:00:00",
+                "2024-02-01 08:00:00",
+                "2024-02-01 08:00:00",
+            ],
+            "You are?": ["Ann", "Bob", "Cara"],
+            # 1999-03 is the canonical typo example.
+            "Workout date": ["1999-03-15", "2023-12-31", "2024-01-01"],
+            "Burnt >= 250 calories?": ["yes", "yes", "yes"],
+        }
+    )
+    out = clean(df, dedupe=False)
+    assert set(out["name"]) == {"Cara"}
+
+
+def test_clean_drops_workout_after_timestamp():
+    """workout_date > timestamp_date is logically impossible (typo)."""
+    df = pd.DataFrame(
+        {
+            "Timestamp": ["2024-02-01 08:00:00", "2024-02-05 08:00:00"],
+            "You are?": ["Ann", "Bob"],
+            # Ann logged on Feb 1 but claims Feb 10 workout — typo.
+            "Workout date": ["2024-02-10", "2024-02-03"],
+            "Burnt >= 250 calories?": ["yes", "yes"],
+        }
+    )
+    out = clean(df, dedupe=False)
+    assert set(out["name"]) == {"Bob"}
+
+
+def test_clean_drops_blank_names():
+    df = pd.DataFrame(
+        {
+            "Timestamp": ["2024-02-01 08:00:00"] * 4,
+            "You are?": ["Ann", "   ", "", "Bob"],
+            "Workout date": ["2024-01-15"] * 4,
+            "Burnt >= 250 calories?": ["yes"] * 4,
+        }
+    )
+    out = clean(df, dedupe=False)
+    assert set(out["name"]) == {"Ann", "Bob"}
+
+
+def test_clean_drops_nat_timestamp():
+    df = pd.DataFrame(
+        {
+            "Timestamp": ["2024-02-01 08:00:00", "garbage", ""],
+            "You are?": ["Ann", "Bob", "Cara"],
+            "Workout date": ["2024-01-15", "2024-01-15", "2024-01-15"],
+            "Burnt >= 250 calories?": ["yes", "yes", "yes"],
+        }
+    )
+    out = clean(df, dedupe=False)
+    assert set(out["name"]) == {"Ann"}
+
+
+def test_clean_drops_negative_calories():
+    df = _make_df_with_calories(["300", "-50", "0", "500"])
+    out = clean(df, dedupe=False)
+    # Negative dropped; 0 kept (valid edge — rest day with logged "0").
+    assert sorted(out["calories_burned"].tolist()) == [0, 300, 500]
+
+
+def test_clean_reconciles_burnt_250_with_calories():
+    """If calories present, burnt_250 is derived from calories >= 250."""
+    df = pd.DataFrame(
+        {
+            "Timestamp": ["2024-02-01 08:00:00"] * 4,
+            "You are?": ["A", "B", "C", "D"],
+            "Workout date": ["2024-01-15"] * 4,
+            # User checked YES but only burnt 100 cal -> override to False.
+            # User checked NO but burnt 800 cal -> override to True.
+            "Burnt >= 250 calories?": ["yes", "no", "yes", "no"],
+            "How many calories did you burn?": ["100", "800", "300", "200"],
+        }
+    )
+    out = clean(df, dedupe=False).sort_values("name").reset_index(drop=True)
+    # A: 100 cal -> False (overrode the YES bool)
+    # B: 800 cal -> True  (overrode the NO bool)
+    # C: 300 cal -> True  (matches)
+    # D: 200 cal -> False (matches)
+    assert list(out["burnt_250"]) == [False, True, True, False]
+
+
+def test_clean_keeps_form_bool_when_calories_missing():
+    """If calories blank, fall back to the form's burnt_250 checkbox."""
+    df = pd.DataFrame(
+        {
+            "Timestamp": ["2024-02-01 08:00:00", "2024-02-01 08:00:00"],
+            "You are?": ["A", "B"],
+            "Workout date": ["2024-01-15", "2024-01-15"],
+            "Burnt >= 250 calories?": ["yes", "no"],
+            "How many calories did you burn?": ["", ""],
+        }
+    )
+    out = clean(df, dedupe=False).sort_values("name").reset_index(drop=True)
+    assert list(out["burnt_250"]) == [True, False]

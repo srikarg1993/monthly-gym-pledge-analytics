@@ -10,6 +10,8 @@ from datetime import date
 
 import pandas as pd
 
+from gym_pledge.app_time import today_app
+
 
 def month_leaderboard(df: pd.DataFrame, month_str: str, cutoff: int, all_users=None) -> pd.DataFrame:
     d = df[(df["month"] == month_str) & (df["workout_date"].notna())].copy()
@@ -104,8 +106,19 @@ def frontload_vs_cram(df_month: pd.DataFrame) -> pd.DataFrame:
     mid = start + (end - start) / 2
     mid = date(mid.year, mid.month, int(mid.day))
 
+    # Defense in depth: future-dated rows should already have been dropped in
+    # data.source.clean, but the second-half logic below assumes today's date,
+    # so we still gate on `today` rather than trust the input.
+    today = today_app()
     qual = df_month[df_month["burnt_250"]].copy()
     all_names = sorted(df_month["name"].dropna().unique().tolist())
+
+    # Once the month is current and we're still in the first half, the second
+    # half hasn't started yet by definition — calling anyone "Balanced" or
+    # "Crammer" mid-first-half is meaningless (e.g. first=1, second=0 should
+    # not be "Balanced"). Collapse to a simple Front-loader / No qualifying
+    # split until the calendar mid-point passes.
+    second_half_started = today > mid
 
     def split_counts(workout_dates):
         days = sorted(set(workout_dates.dropna().tolist()))
@@ -114,6 +127,9 @@ def frontload_vs_cram(df_month: pd.DataFrame) -> pd.DataFrame:
         total = first + second
         if total == 0:
             style = "No qualifying"
+        elif not second_half_started:
+            # Second half hasn't begun; second is forced to 0 above.
+            style = "Front-loader"
         elif first >= second + 3:
             style = "Front-loader"
         elif second >= first + 3:
