@@ -52,7 +52,7 @@ Example `.streamlit/secrets.toml`:
 type = "service_account"
 project_id = "..."
 private_key_id = "..."
-private_key = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+private_key = "<PASTE PEM-FORMATTED PRIVATE KEY HERE, INCLUDING BEGIN/END LINES>"
 client_email = "..."
 client_id = "..."
 auth_uri = "https://accounts.google.com/o/oauth2/auth"

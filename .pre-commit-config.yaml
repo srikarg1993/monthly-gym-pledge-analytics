@@ -27,10 +27,14 @@ repos:
   # independent of size. Belt-and-suspenders alongside .gitignore in case a
   # gitignore entry is removed before the artifact is deleted (the exact
   # mistake that produced the .mutmut-cache commit).
+  #
+  # ``language: python`` makes pre-commit create its own isolated environment
+  # for the hook — portable across machines and avoids the ``python not on
+  # PATH`` error you get on Windows when invoking ``language: system``.
   - repo: local
     hooks:
       - id: forbid-known-junk
         name: forbid known cache / scratch artifacts
         entry: python scripts/forbid_known_junk.py
-        language: system
+        language: python
         pass_filenames: true
