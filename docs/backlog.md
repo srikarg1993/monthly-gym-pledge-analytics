@@ -157,3 +157,49 @@ Smallest set of changes that captures most of the value:
    https://pledge2fit.streamlit.app/ and fails if status != 200
 
 Everything else is over-engineering for a private friend-group app.
+
+---
+
+## Adversarial review 2026-05-10 — deferred items
+
+The following findings from `docs/adversarial/2026-05-10-adversarial-feedback.md`
+were intentionally deferred during the 2026-05-10 implementation pass.
+See `ADVERSARIAL_REPORT_FIXES.md` for the full disposition.
+
+### Deferred (⏳)
+
+- [ ] **P1-10** — Restrict sheet read to needed columns (`get_all_records`
+      currently pulls every column). Low value today; payload <1 MB and
+      cached.
+- [ ] **P2-09** — Fail loud when `APP_TIMEZONE` is unset / unparseable.
+      Currently logs nothing and falls back to system local time.
+- [ ] **P2-10** — Streamlit `AppTest` smoke per page. Blocked because
+      pages call `st.set_page_config` from `dashboard.main()`, which
+      AppTest's harness doesn't replay cleanly. Consider extracting a
+      `render_<page>(df, ...)` for each page.
+- [ ] **P2-11 / P2-17 / P2-18** — SHA-pin GitHub Actions. Repo convention
+      is major-version pinning; flip if a real CVE arrives.
+- [ ] **P2-14** — Add pyright job in CI. Type coverage is patchy; first
+      run would be very noisy.
+- [ ] **P2-16** — Post-deploy synthetic health check. Streamlit Cloud has
+      no public health endpoint to probe deterministically.
+- [ ] **P2-20** — Replace `render_styled_table` with native `st.dataframe`
+      where styling isn't required.
+- [ ] **P2-28** — Cache `build_cumulative_calories_long`.
+- [ ] **P2-29** — Move captions used as labels into `help=` tooltips.
+- [ ] **P3-02** — Delete `_build_weekday_mix_df` (dead code in
+      `ui/scorecard.py`).
+- [ ] **P3-18** — Migrate scorecard's local `STATUS_COLORS` to
+      `ui.theme.STATUS_COLORS`.
+- [ ] **P4-01** — Backfill type hints on older public helpers in
+      `data/metrics.py` and `ui/common.py`.
+- [ ] **P4-05** — Add `CHANGELOG.md` / release notes process.
+
+### Partially shipped (🟡)
+
+- [ ] **P2-19** — Migrate `ui/scorecard.py` to import palette from
+      `ui/theme.py` (common.py + yearcalendar.py done).
+- [ ] **P3-01** — Continue decomposing `ui/common.py` (theme + escape
+      already extracted; chart factories still need their own modules).
+- [ ] **P3-15** — Decide hidden pages' fate (`monthovermonth.py`,
+      `personalization.py`) — keep as deep-link targets or delete.

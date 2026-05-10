@@ -1,8 +1,10 @@
 """Personalization page: per-person day-of-week trends and comparison charts."""
 
+import matplotlib.pyplot as plt
 import streamlit as st
 
 from ui.common import render_card_end, render_card_start, render_seaborn_line, style_plots
+from ui.escape import safe_html
 
 
 def render(*, df_month) -> None:
@@ -10,6 +12,10 @@ def render(*, df_month) -> None:
     st.markdown("<hr>", unsafe_allow_html=True)
 
     people = sorted(df_month["name"].dropna().unique().tolist())
+    if not people:
+        st.caption("No participants for this month yet.")
+        render_card_end()
+        return
     who = st.selectbox("Person", people)
 
     weekday_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -44,6 +50,7 @@ def render(*, df_month) -> None:
             figsize=(6.9, 3.2),
         )
         st.pyplot(fig, use_container_width=True)
+        plt.close(fig)
         render_card_end()
 
     with right:
@@ -52,12 +59,12 @@ def render(*, df_month) -> None:
             person,
             x="dow",
             y="Unique workout days",
-            title=f"{who}: workouts by weekday",
+            title=f"{safe_html(who)}: workouts by weekday",
             xlabel="Weekday",
             ylabel="Unique days",
             figsize=(6.9, 3.2),
         )
         st.pyplot(fig, use_container_width=True)
-        render_card_end()
+        plt.close(fig)
 
     render_card_end()

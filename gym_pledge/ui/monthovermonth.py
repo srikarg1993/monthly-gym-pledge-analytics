@@ -71,8 +71,10 @@ def _build_leaderboard_comparison_table(df: pd.DataFrame, last_month: str, curre
     users_last = get_users(last_month)
     users_current = get_users(current_month)
 
-    lb_last = month_leaderboard(df, last_month, winner_cutoff_for_month(last_month), users_last or None)
-    lb_current = month_leaderboard(df, current_month, winner_cutoff_for_month(current_month), users_current or None)
+    lb_last = month_leaderboard(df, last_month, winner_cutoff_for_month(last_month), users_last.users or None)
+    lb_current = month_leaderboard(
+        df, current_month, winner_cutoff_for_month(current_month), users_current.users or None
+    )
 
     names = sorted(set(lb_last.get("name", [])) | set(lb_current.get("name", [])))
     if not names:

@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "gym_pledge"))
 
 from ui.yearcalendar import (
-    _monthly_breakdown_chart_html,
+    _altair_monthly_chart,
     _name_col,
     _year_from_month_str,
     _year_stats_for_person,
@@ -95,14 +95,30 @@ def test_year_stats_for_person_unknown_person_returns_zeros_and_empty_monthly():
     assert monthly_df.empty
 
 
-def test_monthly_breakdown_chart_html_embeds_data_and_cdn():
-    html = _monthly_breakdown_chart_html(months=["Jan", "Feb"], workouts=[5, 3], qualifying=[4, 2])
-    assert "Jan" in html
-    assert "Feb" in html
-    assert "5" in html
-    assert "3" in html
-    assert "4" in html
-    assert "2" in html
-    assert "apexcharts" in html.lower()
-    assert 'data-type="bar"' in html
-    assert 'data-type="area"' in html
+def test_altair_monthly_chart_builds_native_altair_chart():
+    """Yearbook now uses native Altair instead of an ApexCharts CDN embed.
+
+    The chart spec must include both series and the month names from the
+    input DataFrame.
+    """
+    monthly_df = pd.DataFrame(
+        {
+            "Month": ["Jan", "Feb"],
+            "Workouts": [5, 3],
+            "Qualifying": [4, 2],
+        }
+    )
+    chart = _altair_monthly_chart(monthly_df)
+    spec = chart.to_dict()
+    # Spec must mention both months and both series labels.
+    spec_text = repr(spec)
+    assert "Jan" in spec_text
+    assert "Feb" in spec_text
+    assert "Workouts" in spec_text
+    assert "Qualifying" in spec_text
+
+
+def test_altair_monthly_chart_handles_empty_input():
+    chart = _altair_monthly_chart(pd.DataFrame())
+    # Should not raise and should produce a valid (empty) Altair spec.
+    assert chart.to_dict() is not None

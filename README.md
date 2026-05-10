@@ -11,11 +11,20 @@ Streamlit dashboard for a monthly fitness pledge, backed by a Google Form and Go
 > AI agents working on this repo: read [`agents.md`](agents.md) first. It captures the project's hard rules, layering, visual design language, and skill index.
 
 ## Features
-- Sidebar navigation: About us, Leaderboard, Scorecard, Log Your Workout
+- Sidebar navigation: About us, Leaderboard, Scorecard, Fitness Yearbook, Log Your Workout
 - Leaderboard for the current month with active-user backfill
 - Scorecard with modernized charts: qualifying progress ladder, cumulative calorie race, weekday cadence radar, longest streak heartbeat, Brick by Brick vs All-Nighter split, Lazy Logger bubble clusters
-- Year calendar heatmap and month-over-month trends
-- Workout logging CTA that opens the Google Form
+- Fitness Yearbook (year calendar heatmap + monthly Altair breakdown, tabbed for mobile)
+- Workout logging CTA that embeds the Google Form (with a fallback link)
+
+## Privacy model
+
+This is a **single private friend group's** dashboard, **not** a public service.
+There is no auth gate. The deployment URL is shared only with the participants
+and security relies on URL obscurity. See
+[ADR 0010](docs/adr/0010-privacy-posture.md) for the full posture and threat
+model. If you fork this for a different group, **decide your own privacy
+posture before pointing it at production data**.
 
 ## Documentation
 
@@ -27,19 +36,21 @@ Streamlit dashboard for a monthly fitness pledge, backed by a Google Form and Go
 ## Tests
 
 ```bash
-pytest tests/
+python -m pytest tests/
 # with coverage:
-pytest --cov=gym_pledge.data --cov=gym_pledge.config tests/
+python -m pytest --cov=gym_pledge.data --cov=gym_pledge.config tests/
 ```
 
 Coverage floor: **75 %** on `gym_pledge/data/*` and `gym_pledge/config/*`. UI render functions are not held to this floor — their pure data helpers are.
 
 ## Setup
-1) Install dependencies:
+1) Install dependencies (uv is the project standard):
 
 ```bash
-pip install -r requirements.txt
+uv pip install -r requirements-dev.txt
 ```
+
+App-only deployments can use `uv pip install -r requirements.txt`.
 
 2) Configure Google Sheets access:
 - Create a service account in GCP and download the JSON.
@@ -75,6 +86,19 @@ client_x509_cert_url = "..."
 ```bash
 streamlit run gym_pledge/dashboard.py
 ```
+
+### Timezone configuration
+
+All "now" / "today" decisions in the app are routed through
+`gym_pledge/app_time.py` and obey the `APP_TIMEZONE` environment variable
+(IANA name; default `America/Chicago`). Set it in Streamlit Cloud secrets
+or your shell to match the participant group's local time:
+
+```bash
+export APP_TIMEZONE="America/Los_Angeles"
+```
+
+See [ADR 0004](docs/adr/0004-timezone-via-app-time.md) for the rationale.
 
 ## Project layout
 - `gym_pledge/dashboard.py`: app shell and sidebar navigation

@@ -13,7 +13,20 @@ import pandas as pd
 from app_time import today_app
 
 
-def month_leaderboard(df: pd.DataFrame, month_str: str, cutoff: int, all_users=None) -> pd.DataFrame:
+def month_leaderboard(
+    df: pd.DataFrame,
+    month_str: str,
+    cutoff: int,
+    all_users: Iterable[str] | None = None,
+) -> pd.DataFrame:
+    """Build the per-month leaderboard DataFrame.
+
+    Ranking semantics (intentionally multi-key, adversarial P1-03):
+    primary by qualifying_days (desc), then workout_days (desc), then
+    total_calories (desc). Ties on all three keys share a rank — but
+    ``rank()`` uses ``method="min"`` so we surface true competition
+    ranks instead of alphabetical accidents.
+    """
     d = df[(df["month"] == month_str) & (df["workout_date"].notna())].copy()
 
     any_days = d.groupby("name")["workout_date"].nunique().rename("workout_days").reset_index()
@@ -39,13 +52,14 @@ def month_leaderboard(df: pd.DataFrame, month_str: str, cutoff: int, all_users=N
     out["workouts_left"] = (cutoff - out["qualifying_days"]).clip(lower=0)
     out["is_winner"] = out["qualifying_days"] >= cutoff
     out["progress"] = (out["qualifying_days"] / max(cutoff, 1)).clip(0, 1)
-    out["rank"] = out["qualifying_days"].rank(method="dense", ascending=False).astype(int)
 
-    # Order leaderboard by qualifying workouts (desc) then alphabetically by name (asc)
-    out = out.sort_values(
-        ["qualifying_days", "name"],
-        ascending=[False, True],
-    ).reset_index(drop=True)
+    # Rank by multi-key composite so ties on qualifying_days are broken
+    # by workout_days then total_calories. A pure qualifying-day rank
+    # treats two participants with very different effort as identical
+    # and then sorts them alphabetically — surprising and unfair (P1-03).
+    sort_keys = ["qualifying_days", "workout_days", "total_calories", "name"]
+    out = out.sort_values(sort_keys, ascending=[False, False, False, True]).reset_index(drop=True)
+    out["rank"] = out["qualifying_days"].rank(method="dense", ascending=False).astype(int)
 
     return out
 

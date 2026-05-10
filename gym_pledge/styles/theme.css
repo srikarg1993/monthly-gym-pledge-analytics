@@ -378,7 +378,7 @@ div[class*=" st-key-lb_pick_"] button::after {
   display: inline-block;
 }
 .legend-missed{
-  background: rgba(239,68,68,0.9);
+  background: rgba(255,255,255,0.18);
 }
 .calendar-grid{
   display: grid;
@@ -433,7 +433,7 @@ div[class*=" st-key-lb_pick_"] button::after {
   margin-top: 4px;
 }
 .cal-dot-none{
-  background: rgba(239,68,68,0.9);
+  background: rgba(255,255,255,0.18);
 }
 .cal-dot-hidden{
   background: transparent;
@@ -539,45 +539,43 @@ section[data-testid="stSidebar"] div.stButton > button:hover {
   box-shadow: 0 10px 22px rgba(0,0,0,0.55);
 }
 
-/* Active state (we’ll wire this next if you want) */
+/* Active state: backed by dashboard's st.radio (built-in indicator). */
 section[data-testid="stSidebar"] div.stButton > button:focus {
   outline: none;
   border-color: rgba(99,102,241,0.6);
 }
 
-div[class^="st-key-"],
-div[class*=" st-key-"] {
+/* Card containers — only style explicit, well-known keys instead of
+ * blanket-styling every keyed Streamlit container. The global selector
+ * was a footgun that turned every new st.container(key=...) call into
+ * a card with padding, border, shadow, and horizontal scroll.
+ * (Adversarial finding P2-21.) */
+div.st-key-pledge_pulse,
+div.st-key-qualifying_progress,
+div.st-key-calorie_race,
+div.st-key-longest_streak,
+div.st-key-fastest_winner,
+div.st-key-lazy_logger,
+div.st-key-front_loading,
+div.st-key-weekday_cadence {
   background: rgba(28,36,60,0.96);
   border-radius: 18px;
   border: 1px solid rgba(255,255,255,0.12);
   padding: 18px;
   box-shadow: 0 14px 38px rgba(0,0,0,0.5);
   margin-bottom: 18px;
-  overflow-x: scroll;
+  overflow-x: auto;
 }
 
-/* Do not apply the generic keyed-container card wrapper to leaderboard pick buttons. */
-div[class^="st-key-lb_pick_"],
-div[class*=" st-key-lb_pick_"] {
-  background: transparent !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  padding: 0 !important;
-  box-shadow: none !important;
-  margin-bottom: 0 !important;
-  overflow: visible !important;
-}
-
-/* Use a unified rank group panel style for each leaderboard rank container. */
+/* Leaderboard rank container styling (kept explicit, not under the
+ * blanket selector). */
 div[class^="st-key-lb_rank_"],
 div[class*=" st-key-lb_rank_"] {
-  background: rgba(28,36,60,0.9) !important;
-  border: 1px solid rgba(255,255,255,0.12) !important;
-  border-radius: 14px !important;
-  padding: 10px 12px !important;
-  box-shadow: none !important;
-  margin-bottom: 10px !important;
-  overflow: visible !important;
+  background: rgba(28,36,60,0.9);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 14px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
 }
 
 .stToolbarActionButtonIcon {
