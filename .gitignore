@@ -39,6 +39,7 @@ Thumbs.db
 # Secrets
 service_account.json
 .streamlit/secrets.toml
+**/.streamlit/secrets.toml
 secrets/
 
 # Claude / agent scratch
