@@ -1862,17 +1862,20 @@ def pack_lazy_bubbles(df: pd.DataFrame, *, name_col: str, delay_col: str, size_c
     tiny deterministic jitter (seeded by name hash) for organic clustering.
 
     Output columns added: ``Zone``, ``ZoneLabel``, ``Color``, ``FirstName``,
-    ``x`` (within-zone column index, centered), ``y`` (row index, centered).
+    ``LastName``, ``x`` (within-zone column index, centered), ``y`` (row index,
+    centered).
     """
     if df is None or df.empty:
         cols = list(df.columns) if df is not None else []
-        return pd.DataFrame(columns=[*cols, "Zone", "ZoneLabel", "Color", "FirstName", "x", "y"])
+        return pd.DataFrame(columns=[*cols, "Zone", "ZoneLabel", "Color", "FirstName", "LastName", "x", "y"])
 
     out = df.copy().reset_index(drop=True)
     out["Zone"] = out[delay_col].map(classify_lazy_zone)
     out["ZoneLabel"] = out["Zone"].map(LAZY_ZONE_LABELS)
     out["Color"] = out["Zone"].map(LAZY_ZONE_COLORS)
-    out["FirstName"] = out[name_col].astype(str).str.split().str[0]
+    name_parts = out[name_col].astype(str).str.split(n=1)
+    out["FirstName"] = name_parts.str[0]
+    out["LastName"] = name_parts.str[1].fillna("")
 
     pieces: list[pd.DataFrame] = []
     for zone_id in LAZY_ZONE_IDS:
@@ -2056,12 +2059,19 @@ def alt_lazy_zone_clusters(
         ],
     )
 
-    bubble_labels = alt.Chart(bubble_df).mark_text(
-        color="#FFFFFF", fontSize=12, fontWeight=700,
+    # Two-line label: first name on top, last name underneath. Altair/Vega
+    # treats list-typed text fields as multi-line.
+    label_df = bubble_df.copy()
+    label_df["NameLines"] = label_df.apply(
+        lambda r: [str(r["FirstName"]), str(r["LastName"])] if str(r.get("LastName", "")).strip() else [str(r["FirstName"])],
+        axis=1,
+    )
+    bubble_labels = alt.Chart(label_df).mark_text(
+        color="#FFFFFF", fontSize=12, fontWeight=700, lineBreak="\n",
     ).encode(
         x=x_enc,
         y=y_enc,
-        text="FirstName:N",
+        text="NameLines:N",
     )
 
     chart = (
@@ -2089,22 +2099,27 @@ LAZY_BUBBLE_PER_CHAR = 3.6
 LAZY_BUBBLE_BASE = 18
 
 
-def _lazy_bubble_radius(first_name: str) -> float:
-    """Choose a bubble radius (px) that comfortably fits the first name."""
-    name_len = max(len(str(first_name)), 1)
+def _lazy_bubble_radius(first_name: str, last_name: str = "") -> float:
+    """Choose a bubble radius (px) that comfortably fits the longest name line."""
+    name_len = max(len(str(first_name)), len(str(last_name)), 1)
     candidate = LAZY_BUBBLE_BASE + name_len * LAZY_BUBBLE_PER_CHAR
+    # Two-line labels need a touch more vertical room.
+    if str(last_name).strip():
+        candidate += 4
     return float(max(LAZY_BUBBLE_MIN_R, min(LAZY_BUBBLE_MAX_R, candidate)))
 
 
-def _lazy_bubble_font_size(first_name: str, radius: float) -> int:
+def _lazy_bubble_font_size(first_name: str, radius: float, last_name: str = "") -> int:
     """Pick the largest font size whose rendered width still fits the bubble."""
-    name_len = max(len(str(first_name)), 1)
+    name_len = max(len(str(first_name)), len(str(last_name)), 1)
     diameter = 2 * radius
     horizontal_pad = 8  # 4px padding either side
     avail = max(diameter - horizontal_pad, 12)
     # avg glyph width ~= 0.55 * font_size for Inter/Segoe weight 700
     by_width = avail / (name_len * 0.55)
-    by_height = radius * 0.85
+    # Two-line labels share vertical space, so cap each line at ~0.42 * r.
+    line_ratio = 0.42 if str(last_name).strip() else 0.85
+    by_height = radius * line_ratio
     return int(max(11, min(by_width, by_height)))
 
 
@@ -2186,18 +2201,60 @@ def render_lazy_bubble_clusters(
         return
 
     cols = st.columns(3, gap="medium")
-    for col, (zone_id, label, headline, subtitle, color, icon) in zip(
-        cols, LAZY_ZONES, strict=False
-    ):
-        zone_df = df[df["Zone"] == zone_id].copy()
-        zone_df = zone_df.sort_values([size_col, name_col], ascending=[False, True]).reset_index(drop=True)
 
-        radii = [_lazy_bubble_radius(fn) for fn in zone_df["FirstName"]]
+    # --- Pass 1: pack every zone first so we can pick a single shared scale.
+    # Without this, a zone holding only one bubble would auto-scale that lone
+    # bubble to fill the entire card (its half-extent equals its own radius),
+    # producing a comically oversized circle. Sharing one scale across cards
+    # keeps bubble sizes comparable and naturally caps the lone-bubble case.
+    packed_by_zone: dict[str, dict] = {}
+    global_half_ext = 0.0
+    for zone_id, _label, _headline, _subtitle, _color, _icon in LAZY_ZONES:
+        zone_df = df[df["Zone"] == zone_id].copy()
+        zone_df = zone_df.sort_values(
+            [size_col, name_col], ascending=[False, True]
+        ).reset_index(drop=True)
+
+        last_names = (
+            zone_df["LastName"]
+            if "LastName" in zone_df.columns
+            else [""] * len(zone_df)
+        )
+        radii = [
+            _lazy_bubble_radius(fn, ln)
+            for fn, ln in zip(zone_df["FirstName"], last_names, strict=False)
+        ]
         positions = _greedy_pack_circles(radii)
         if positions:
             mean_x = sum(x for x, _ in positions) / len(positions)
             mean_y = sum(y for _, y in positions) / len(positions)
             positions = [(x - mean_x, y - mean_y) for x, y in positions]
+            half_ext = max(
+                max(abs(x) + r for (x, _y), r in zip(positions, radii, strict=False)),
+                max(abs(y) + r for (_x, y), r in zip(positions, radii, strict=False)),
+            )
+            # For a single bubble, half_ext == radius. Pretend the cluster is
+            # at least 3 bubble-diameters wide so the lone bubble doesn't
+            # explode to fill the canvas on its own card.
+            half_ext = max(half_ext, LAZY_BUBBLE_MAX_R * 3.0)
+            global_half_ext = max(global_half_ext, half_ext)
+        packed_by_zone[zone_id] = {
+            "zone_df": zone_df,
+            "radii": radii,
+            "positions": positions,
+        }
+
+    VB = 300.0
+    scale_to_vb = (VB / 2 - 6) / global_half_ext if global_half_ext > 0 else 1.0
+
+    # --- Pass 2: render each card with the shared scale.
+    for col, (zone_id, label, headline, subtitle, color, icon) in zip(
+        cols, LAZY_ZONES, strict=False
+    ):
+        packed = packed_by_zone[zone_id]
+        zone_df = packed["zone_df"]
+        radii = packed["radii"]
+        positions = packed["positions"]
 
         # Compute lighter / darker variants of the accent color for the
         # radial-gradient stops. Light = blend toward white, dark = blend
@@ -2241,23 +2298,18 @@ def render_lazy_bubble_clusters(
 
         # SVG with viewBox for fluid scaling. We define a per-card radial
         # gradient and a soft outer-glow filter once in <defs>, then reuse
-        # them for every bubble.
-        VB = 300.0
-        if positions:
-            half_ext = max(
-                max(abs(x) + r for (x, _y), r in zip(positions, radii, strict=False)),
-                max(abs(y) + r for (_x, y), r in zip(positions, radii, strict=False)),
-            )
-            scale_to_vb = (VB / 2 - 6) / max(half_ext, 1.0)
-        else:
-            scale_to_vb = 1.0
+        # them for every bubble. The scale (`scale_to_vb`) is shared across
+        # all three cards (computed in pass 1 above) so bubbles stay
+        # comparably sized regardless of how many live in each zone.
         cx0, cy0 = VB / 2, VB / 2
 
-        def _vb_font(name: str, r_vb: float) -> float:
-            name_len = max(len(str(name)), 1)
+        def _vb_font(first: str, r_vb: float, last: str = "") -> float:
+            name_len = max(len(str(first)), len(str(last)), 1)
             avail = max(2 * r_vb - 6, 6)
             by_width = avail / (name_len * 0.55)
-            by_height = r_vb * 0.85
+            # Two-line labels cap each line at ~0.42 * r so both fit vertically.
+            line_ratio = 0.42 if str(last).strip() else 0.85
+            by_height = r_vb * line_ratio
             return max(7.0, min(by_width, by_height))
 
         grad_id = f"bubbleGrad_{zone_id}"
@@ -2283,8 +2335,35 @@ def render_lazy_bubble_clusters(
             cx = cx0 + x * scale_to_vb
             cy = cy0 + y * scale_to_vb
             r_vb = r * scale_to_vb
-            font_vb = _vb_font(row["FirstName"], r_vb)
+            first = str(row["FirstName"])
+            last = str(row.get("LastName", "") or "").strip()
+            font_vb = _vb_font(first, r_vb, last)
             tip = f"{row[name_col]} \u2022 {row[delay_col]:.2f}d \u2022 {int(row[size_col])} logs"
+
+            # Build the name text. With a last name we render two stacked
+            # tspans, vertically centered around (cx, cy). Without a last
+            # name we keep the original single-line treatment.
+            text_style = (
+                f"font-size='{font_vb:.2f}' font-weight='700' "
+                f"text-anchor='middle' "
+                f"font-family='Inter, Segoe UI, sans-serif' "
+                f"style='paint-order:stroke;stroke:rgba(11,18,32,0.55);stroke-width:1.2;'"
+            )
+            if last:
+                line_h = font_vb * 1.05
+                top_y = cy - line_h / 2 + font_vb * 0.35
+                name_text = (
+                    f"<text x='{cx:.2f}' y='{top_y:.2f}' fill='#FFFFFF' {text_style}>"
+                    f"{first}"
+                    f"<tspan x='{cx:.2f}' dy='{line_h:.2f}'>{last}</tspan>"
+                    f"</text>"
+                )
+            else:
+                name_text = (
+                    f"<text x='{cx:.2f}' y='{cy:.2f}' fill='#FFFFFF' "
+                    f"dominant-baseline='central' {text_style}>{first}</text>"
+                )
+
             svg_parts.append(
                 f"<g><title>{tip}</title>"
                 # Soft outer glow circle (blurred, behind the bubble)
@@ -2297,13 +2376,7 @@ def render_lazy_bubble_clusters(
                 f"<ellipse cx='{cx - r_vb * 0.30:.2f}' cy='{cy - r_vb * 0.40:.2f}' "
                 f"rx='{r_vb * 0.45:.2f}' ry='{r_vb * 0.20:.2f}' "
                 f"fill='rgba(255,255,255,0.18)'/>"
-                # Name text
-                f"<text x='{cx:.2f}' y='{cy:.2f}' fill='#FFFFFF' "
-                f"font-size='{font_vb:.2f}' font-weight='700' "
-                f"text-anchor='middle' dominant-baseline='central' "
-                f"font-family='Inter, Segoe UI, sans-serif' "
-                f"style='paint-order:stroke;stroke:rgba(11,18,32,0.55);stroke-width:1.2;'>"
-                f"{row['FirstName']}</text>"
+                f"{name_text}"
                 f"</g>"
             )
 
@@ -2533,15 +2606,33 @@ def alt_cumulative_calorie_race_chart(
     ).encode(x="workout_date:T", y="cum_calories:Q", color=color_enc)
 
     # --- Stagger labels vertically so they don't overlap ---
-    y_span = max(float(df["cum_calories"].max()) - float(df["cum_calories"].min()), 1.0)
-    min_gap = max(y_span * 0.055, 1.0)
+    # Balanced relaxation: start each label at its true endpoint y, then
+    # iteratively push overlapping neighbors apart symmetrically. This keeps
+    # every chip as close to its line as possible (vs. a monotonic downward
+    # cascade, which can drag a mid-pack label far below its actual value
+    # whenever the field is tightly clustered).
+    y_min = float(df["cum_calories"].min())
+    y_max = float(df["cum_calories"].max())
+    y_span = max(y_max - y_min, 1.0)
+    min_gap = max(y_span * 0.04, 1.0)
     last_rows = last_rows.sort_values("cum_calories", ascending=False).reset_index(drop=True)
-    label_ys: list[float] = []
-    for raw_y in last_rows["cum_calories"].astype(float):
-        if not label_ys:
-            label_ys.append(raw_y)
-        else:
-            label_ys.append(min(raw_y, label_ys[-1] - min_gap))
+    label_ys = last_rows["cum_calories"].astype(float).tolist()
+    n = len(label_ys)
+    for _ in range(200):
+        moved = False
+        for i in range(n - 1):
+            gap = label_ys[i] - label_ys[i + 1]
+            if gap < min_gap:
+                push = (min_gap - gap) / 2.0
+                label_ys[i] += push
+                label_ys[i + 1] -= push
+                moved = True
+        if not moved:
+            break
+    # Clamp to a reasonable band around the data so labels don't fly off-axis.
+    pad = y_span * 0.08
+    lo, hi = y_min - pad, y_max + pad
+    label_ys = [min(max(y, lo), hi) for y in label_ys]
     last_rows["label_y"] = label_ys
 
     leader_lines = alt.Chart(last_rows).mark_rule(
