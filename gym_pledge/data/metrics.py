@@ -39,11 +39,7 @@ def month_leaderboard(df: pd.DataFrame, month_str: str, cutoff: int, all_users=N
     out["workouts_left"] = (cutoff - out["qualifying_days"]).clip(lower=0)
     out["is_winner"] = out["qualifying_days"] >= cutoff
     out["progress"] = (out["qualifying_days"] / max(cutoff, 1)).clip(0, 1)
-    out["rank"] = (
-        out["qualifying_days"]
-        .rank(method="dense", ascending=False)
-        .astype(int)
-    )
+    out["rank"] = out["qualifying_days"].rank(method="dense", ascending=False).astype(int)
 
     # Order leaderboard by qualifying workouts (desc) then alphabetically by name (asc)
     out = out.sort_values(
@@ -73,9 +69,7 @@ def longest_streak(dates: Iterable[date]) -> int:
     return best
 
 
-def fastest_winner_date(
-    df_month: pd.DataFrame, name: str, cutoff: int
-) -> date | None:
+def fastest_winner_date(df_month: pd.DataFrame, name: str, cutoff: int) -> date | None:
     d = df_month[(df_month["name"] == name) & (df_month["burnt_250"])].copy()
     if d.empty:
         return None

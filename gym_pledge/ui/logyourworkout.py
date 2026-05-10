@@ -2,13 +2,11 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 WORKOUT_FORM_URL = (
-    "https://docs.google.com/forms/d/e/"
-    "1FAIpQLSeaWgRsPcMfZjwzZ-6pH6qRr4Ev_BgKchxIDPEmHAbGVdbe8Q/viewform?usp=dialog"
+    "https://docs.google.com/forms/d/e/1FAIpQLSeaWgRsPcMfZjwzZ-6pH6qRr4Ev_BgKchxIDPEmHAbGVdbe8Q/viewform?usp=dialog"
 )
 
 WORKOUT_FORM_EMBED_URL = (
-    "https://docs.google.com/forms/d/e/"
-    "1FAIpQLSeaWgRsPcMfZjwzZ-6pH6qRr4Ev_BgKchxIDPEmHAbGVdbe8Q/viewform?embedded=true"
+    "https://docs.google.com/forms/d/e/1FAIpQLSeaWgRsPcMfZjwzZ-6pH6qRr4Ev_BgKchxIDPEmHAbGVdbe8Q/viewform?embedded=true"
 )
 
 FORM_EMBED_WIDTH = 900
@@ -40,4 +38,3 @@ def render():
         height=FORM_EMBED_HEIGHT,
         scrolling=False,
     )
-

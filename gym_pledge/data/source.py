@@ -126,9 +126,7 @@ def clean(
     expected = {col_timestamp, col_name, col_wkdate, col_250}
     missing = expected - set(df.columns)
     if missing:
-        raise ValueError(
-            f"Missing columns: {missing}. Found columns: {list(df.columns)}"
-        )
+        raise ValueError(f"Missing columns: {missing}. Found columns: {list(df.columns)}")
 
     rename_map = {
         col_timestamp: "timestamp",
@@ -144,9 +142,7 @@ def clean(
     df = df.rename(columns=rename_map)
 
     # --- Stage 2: name normalization ------------------------------------------
-    df["name"] = (
-        df["name_raw"].astype(str).str.strip().str.replace(r"\s+", " ", regex=True)
-    )
+    df["name"] = df["name_raw"].astype(str).str.strip().str.replace(r"\s+", " ", regex=True)
     # An empty/whitespace-only name represents a malformed submission. The
     # ``.astype(str)`` above turns NaN into the literal string "nan", so guard
     # against that too.
@@ -187,9 +183,7 @@ def clean(
     # when both dates are in the past, this is logically impossible — you
     # cannot have done a workout on a day you hadn't reached when you wrote
     # the form. Almost always a date-picker typo.
-    logged_in_future = df.apply(
-        lambda r: r["workout_date"] > r["timestamp_date"], axis=1
-    )
+    logged_in_future = df.apply(lambda r: r["workout_date"] > r["timestamp_date"], axis=1)
     if logged_in_future.any():
         df = df[~logged_in_future].reset_index(drop=True)
 
@@ -198,9 +192,7 @@ def clean(
         df["calories_burned"] = pd.to_numeric(df["calories_raw"], errors="coerce")
         # 6a. Genuine garbage like "abc": raw column was non-empty but failed
         # numeric coercion. Blanks are kept (-> NaN calories).
-        raw_filled = df["calories_raw"].notna() & (
-            df["calories_raw"].astype(str).str.strip() != ""
-        )
+        raw_filled = df["calories_raw"].notna() & (df["calories_raw"].astype(str).str.strip() != "")
         bad_input = raw_filled & df["calories_burned"].isna()
         if bad_input.any():
             df = df[~bad_input].reset_index(drop=True)
@@ -240,8 +232,7 @@ def clean(
     df["dom"] = df["workout_dt"].dt.day
 
     df["log_delay_days"] = (
-        pd.to_datetime(df["timestamp_date"], errors="coerce")
-        - pd.to_datetime(df["workout_date"], errors="coerce")
+        pd.to_datetime(df["timestamp_date"], errors="coerce") - pd.to_datetime(df["workout_date"], errors="coerce")
     ).dt.days
 
     return df
@@ -252,7 +243,9 @@ def get_data() -> pd.DataFrame:
     try:
         raw = read_google_sheet_as_df(SPREADSHEET_ID, WORKSHEET_NAME)
     except Exception as e:
-        st.error("Could not read Google Sheet. Check: secrets/service_account.json and share the sheet with the service-account email.")
+        st.error(
+            "Could not read Google Sheet. Check: secrets/service_account.json and share the sheet with the service-account email."
+        )
         st.exception(e)
         st.stop()
 
@@ -264,4 +257,3 @@ def get_data() -> pd.DataFrame:
         st.stop()
 
     return df
-

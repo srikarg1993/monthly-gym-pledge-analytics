@@ -47,18 +47,21 @@ no cold-start, multi-region, OAuth gating, more memory/CPU.
 
 ### Tier 1 — likely worth it
 
-- [ ] **Coverage gate**: add `--cov-fail-under=75` to the pytest step in
-      `ci.yml`. One line; prevents future regressions on the floor we just
-      hit.
-- [ ] **Pre-commit in CI**: add a job that runs `pre-commit run --all-files`
-      so PRs can't bypass local hooks.
-- [ ] **Dependabot version updates**: drop a
-      `.github/dependabot.yml` to auto-PR `pip` + `github-actions` updates
-      weekly.
-- [ ] **CodeQL scanning**: enable in repo Settings → Security; one-click
-      free static analysis for Python.
+- [x] **Coverage gate**: pytest now runs with
+      `--cov=data --cov=config --cov-fail-under=75` (configured in
+      `pyproject.toml`). CI fails the build if `data/*` + `config/*`
+      coverage drops below 75%. Current: ~78%.
+- [x] **Pre-commit in CI**: `ci.yml` now has a `pre-commit` job using
+      `pre-commit/action@v3.0.1` that runs all hooks on every push/PR.
+- [x] **Dependabot version updates**: `.github/dependabot.yml` opens weekly
+      PRs for `pip` (requirements*.txt) and `github-actions`.
+- [x] **CodeQL scanning**: `.github/workflows/codeql.yml` runs on every
+      push to `main`/`p2f`, every PR into `main`, and weekly via cron.
 - [ ] **Branch protection on `main`**: require green CI + 1 approval before
-      merge. Repo settings, no code.
+      merge. Repo settings, no code. **Action for repo owner**: GitHub →
+      Settings → Branches → Add rule for `main` → enable
+      "Require status checks to pass" (select `test`, `pre-commit`,
+      `Analyze (python)`) + "Require pull request reviews".
 
 ### Tier 2 — nice to have
 

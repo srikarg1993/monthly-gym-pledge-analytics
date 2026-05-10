@@ -134,8 +134,8 @@ def test_month_leaderboard_total_calories():
     bob = out[out["name"] == "Bob"].iloc[0]
     cara = out[out["name"] == "Cara"].iloc[0]
 
-    assert ann["total_calories"] == 700   # 300 + 300 + 100
-    assert bob["total_calories"] == 750   # 400 + 350
+    assert ann["total_calories"] == 700  # 300 + 300 + 100
+    assert bob["total_calories"] == 750  # 400 + 350
     assert cara["total_calories"] == 0
 
 

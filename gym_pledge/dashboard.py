@@ -36,6 +36,7 @@ def load_css(rel_path: str):
         unsafe_allow_html=True,
     )
 
+
 load_css("styles/theme.css")
 
 
@@ -127,7 +128,9 @@ with header_cols[1]:
         and (current_tab != "Month-over-month Trends")
         and (current_tab != "Fitness Yearbook")
     ):
-        st.markdown("<div style='white-space:nowrap; font-size:18px; font-weight:600'>Month</div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div style='white-space:nowrap; font-size:18px; font-weight:600'>Month</div>", unsafe_allow_html=True
+        )
         month_selected = st.selectbox("", months, index=default_idx, label_visibility="collapsed")
     else:
         month_selected = months[default_idx]

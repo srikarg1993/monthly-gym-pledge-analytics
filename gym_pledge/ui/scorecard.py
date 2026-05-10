@@ -42,7 +42,7 @@ WEEKDAY_ORDER = [
 
 def _chunks(df: pd.DataFrame, size: int):
     for i in range(0, len(df), size):
-        yield df.iloc[i:i + size]
+        yield df.iloc[i : i + size]
 
 
 def _close_targets(cutoff: int) -> set[int]:
@@ -194,7 +194,9 @@ def _build_all_streaks_df(df_month: pd.DataFrame, exclude_name: str | None = Non
             pd.to_datetime(
                 df_month[(df_month["name"].astype(str) == name) & (df_month["burnt_250"])]["workout_date"],
                 errors="coerce",
-            ).dt.date.dropna().tolist()
+            )
+            .dt.date.dropna()
+            .tolist()
         )
         streak = 0
         for day in pd.date_range(start=start, end=end, freq="D"):
@@ -223,7 +225,9 @@ def _build_streak_wave_df(df_month: pd.DataFrame, focus_name: str) -> pd.DataFra
         pd.to_datetime(
             df_month[(df_month["name"].astype(str) == str(focus_name)) & (df_month["burnt_250"])]["workout_date"],
             errors="coerce",
-        ).dt.date.dropna().tolist()
+        )
+        .dt.date.dropna()
+        .tolist()
     )
 
     rows = []
@@ -399,7 +403,10 @@ def _build_weekday_mix_df(df_month: pd.DataFrame) -> pd.DataFrame:
 
     dates = pd.to_datetime(df_month["workout_date"], errors="coerce")
     overall = (
-        dates.dt.day_name().rename("Weekday").to_frame().assign(count=1)
+        dates.dt.day_name()
+        .rename("Weekday")
+        .to_frame()
+        .assign(count=1)
         .groupby("Weekday")["count"]
         .sum()
         .reindex(WEEKDAY_ORDER, fill_value=0)
@@ -448,8 +455,8 @@ def render(*, lb, df_month, cutoff: int) -> None:
                         f"""
                         <div style="border-radius:8px; padding:12px; text-align:center; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
                           <div style="font-size:60px">&#127942;</div>
-                          <div style="font-weight:600; margin-top:6px">{row['name']}</div>
-                          <div style="color:#9aa0ab;">{int(row['qualifying_days'])} qualifying workouts</div>
+                          <div style="font-weight:600; margin-top:6px">{row["name"]}</div>
+                          <div style="color:#9aa0ab;">{int(row["qualifying_days"])} qualifying workouts</div>
                         </div>
                         """,
                         unsafe_allow_html=True,
@@ -606,7 +613,9 @@ def render(*, lb, df_month, cutoff: int) -> None:
     st.markdown("<hr>", unsafe_allow_html=True)
     with st.container(key="lazy_logger"):
         st.markdown("### Lazy Logger")
-        st.caption("Three zones, sorted left-to-right by how late participants log workouts. A bubble drifts between zones as someone's logging habit changes.")
+        st.caption(
+            "Three zones, sorted left-to-right by how late participants log workouts. A bubble drifts between zones as someone's logging habit changes."
+        )
         if lazy_df is None or lazy_df.empty:
             st.caption("Need timestamps to score logging delay.")
         else:
@@ -627,7 +636,9 @@ def render(*, lb, df_month, cutoff: int) -> None:
     st.markdown("<hr>", unsafe_allow_html=True)
     with st.container(key="front_loading"):
         st.markdown("### Brick by Brick vs All-Nighters")
-        st.caption("Left bars are first-half qualifying workouts. Right bars are second-half qualifying workouts. Balanced rows stay centered.")
+        st.caption(
+            "Left bars are first-half qualifying workouts. Right bars are second-half qualifying workouts. Balanced rows stay centered."
+        )
         if style_df.empty:
             st.caption("No qualifying workouts yet for workout-style analysis.")
         else:
@@ -651,7 +662,9 @@ def render(*, lb, df_month, cutoff: int) -> None:
         with pick_col:
             radar_focus = _resolve_weekday_focus(lb)
 
-        st.caption("Left: the entire group's qualifying cadence. Right: the selected participant's. Each chart auto-scales to its own data so the participant's shape stays readable.")
+        st.caption(
+            "Left: the entire group's qualifying cadence. Right: the selected participant's. Each chart auto-scales to its own data so the participant's shape stays readable."
+        )
 
         if df_month is None or df_month.empty or radar_focus is None:
             st.caption("No workout data for the selected month.")

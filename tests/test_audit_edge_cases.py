@@ -133,19 +133,19 @@ class TestWinnerCutoffForMonth:
 
     def test_clamped_to_minimum_one(self, monkeypatch):
         from config import globals as g
+
         monkeypatch.setitem(g.WINNER_CUTOFF_BY_MONTH, "2099-01", 0)
         assert winner_cutoff_for_month("2099-01") == 1
 
     def test_invalid_override_falls_back(self, monkeypatch):
         from config import globals as g
+
         monkeypatch.setitem(g.WINNER_CUTOFF_BY_MONTH, "2099-02", "not-a-number")
         assert winner_cutoff_for_month("2099-02") == WINNER_CUTOFF
 
 
 class TestNormalizeBool:
-    @pytest.mark.parametrize(
-        "value", ["yes", "YES", "True", " 1 ", "y", "T", "true"]
-    )
+    @pytest.mark.parametrize("value", ["yes", "YES", "True", " 1 ", "y", "T", "true"])
     def test_truthy(self, value):
         assert normalize_bool(value) is True
 
