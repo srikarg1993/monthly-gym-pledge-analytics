@@ -4,6 +4,7 @@
 [![codeql](https://github.com/srikarg1993/monthly-gym-pledge-analytics/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/srikarg1993/monthly-gym-pledge-analytics/actions/workflows/codeql.yml)
 [![python](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
 [![ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 Streamlit dashboard for a monthly fitness pledge, backed by a Google Form and Google Sheet.
 
