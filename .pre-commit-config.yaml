@@ -13,3 +13,24 @@ repos:
       - id: check-yaml
       - id: check-toml
       - id: check-merge-conflict
+      # Block accidental commits of large binaries / caches. The .mutmut-cache
+      # incident (53 KB SQLite blob committed in 6fe2541) would have been
+      # caught here. 100 KB is generous for source files; anything larger
+      # almost certainly belongs in LFS or shouldn't be tracked at all.
+      - id: check-added-large-files
+        args: [--maxkb=100]
+      - id: check-case-conflict
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: detect-private-key
+  # Repo-local guard: block known cache / scratch / build artifacts by name,
+  # independent of size. Belt-and-suspenders alongside .gitignore in case a
+  # gitignore entry is removed before the artifact is deleted (the exact
+  # mistake that produced the .mutmut-cache commit).
+  - repo: local
+    hooks:
+      - id: forbid-known-junk
+        name: forbid known cache / scratch artifacts
+        entry: python scripts/forbid_known_junk.py
+        language: system
+        pass_filenames: true

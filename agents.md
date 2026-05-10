@@ -185,6 +185,10 @@ the task before improvising:
 - `docs/skills/testing.md` — writing tests, fixtures, and coverage expectations.
 - `docs/skills/commit-messages.md` — writing high-signal git commit messages.
 - `docs/skills/ci-workflows.md` — adding or modifying GitHub Actions workflows.
+- `docs/skills/removing-a-tool.md` — safe order of operations for ripping
+  out a library / dev tool / workflow without leaving cache cruft behind.
+- `docs/skills/repo-hygiene.md` — what's allowed at the repo root, where
+  new files go, the `.scratch/` convention for temp work.
 
 ---
 
@@ -251,7 +255,7 @@ is mandatory and non-negotiable.
 
 ### Pre-commit gate (run before EVERY commit + push)
 Fan out the following in parallel — usually one subagent per item — and only
-commit after all four pass:
+commit after all five pass:
 
 1. **Format / lint sweep** — `ruff format .` + `ruff check .` over the whole
    repo (not just changed files).
@@ -268,6 +272,21 @@ commit after all four pass:
    - new ADR in `docs/adr/` (architectural decisions)
    - update to `agents.md` / `CLAUDE.md` (convention changes)
    - update to `README.md` (user-visible behavior changes)
+5. **Diff-hygiene audit** — `git status --short` + `git diff --stat`
+   before staging. The diff must NOT contain:
+   - Binary cache files (`.mutmut-cache`, `.coverage`, `*.sqlite`, `*.db`)
+   - Cache directories (`.pytest_cache/`, `.ruff_cache/`, `__pycache__/`)
+   - Scratch / temp files (`.scratch/`, `*.tmp`, `*.scratch`)
+   - Anything in `.streamlit/secrets.toml` or other secret material
+   - Files >100 KB unless explicitly justified in the commit body
+
+   Use explicit `git add <path>` for cleanup commits — never `git add -A`
+   when removing a tool, because gitignore changes can desync from the
+   working tree mid-cleanup. See [`docs/skills/removing-a-tool.md`](docs/skills/removing-a-tool.md).
+
+   The `forbid-known-junk` pre-commit hook ([`scripts/forbid_known_junk.py`](scripts/forbid_known_junk.py))
+   enforces (3) and (4) automatically; treat it as a backstop, not the
+   primary check.
 
 ### CI verification after push
 - Use [`scripts/ci-status.ps1`](scripts/ci-status.ps1) (requires `gh` CLI)

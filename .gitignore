@@ -46,6 +46,14 @@ secrets/
 # any stray re-install accidentally committing the binary cache file).
 .mutmut-cache
 
+# Ad-hoc scratch / experimentation. Anything you don't want to commit but
+# also don't want to lose to ``git clean`` belongs here. See
+# docs/skills/repo-hygiene.md for the convention.
+.scratch/
+scratch/
+*.scratch
+*.tmp
+
 # Claude / agent scratch
 .claude/settings.json
 .claude/worktrees/
