@@ -57,38 +57,26 @@ no cold-start, multi-region, OAuth gating, more memory/CPU.
       PRs for `pip` (requirements*.txt) and `github-actions`.
 - [x] **CodeQL scanning**: `.github/workflows/codeql.yml` runs on every
       push to `main`/`p2f`, every PR into `main`, and weekly via cron.
-- [ ] **Branch protection on `main`**: require green CI + 1 approval before
-      merge. Repo settings, no code. **Action for repo owner**: GitHub →
-      Settings → Branches → Add rule for `main` → enable
-      "Require status checks to pass" (select `test`, `pre-commit`,
-      `Analyze (python)`) + "Require pull request reviews".
+- [x] **Branch protection on `main`**: configured 2026-05-09 by repo
+      owner via Rulesets. Requires green `test`, `pre-commit`, and
+      `Analyze (python)` checks + 1 PR approval. Force-push and deletion
+      blocked. Streamlit Cloud still auto-deploys on merge to `main`.
 
 ### Tier 2 — nice to have
 
-- [ ] **Secret scanning + push protection**: enable in repo Settings →
-      Code security and analysis. **Action for repo owner**:
-      1. Go to https://github.com/srikarg1993/monthly-gym-pledge-analytics/settings/security_analysis
-      2. Toggle on:
-         - **Secret scanning** (free for public repos)
-         - **Push protection** — blocks pushes that contain known token formats
-         - **Private vulnerability reporting**
-         - **Dependency graph** + **Dependabot alerts** if not already on
-      3. No code change required. Once enabled, GitHub scans every push and
-         past commits for ~200 token formats (AWS, GCP, Stripe, Slack, etc.)
-         and blocks new ones at push time.
-- [x] **Coverage badge in README**: `ci.yml` now uploads `coverage.xml` to
-      Codecov via `codecov/codecov-action@v4`. Badge added to `README.md`.
-      First upload happens on next push to `main`. **Action for repo owner**
-      (only if Codecov says "no token"): visit
-      https://app.codecov.io/gh/srikarg1993 and authorize the repo (free
-      for public repos, no token needed for uploads).
-- [ ] **Auto-format bot**: install [pre-commit.ci](https://pre-commit.ci)
-      as a GitHub App (one click, free for public repos). It auto-runs
-      every hook on every PR and pushes a fixup commit if `ruff format` /
-      `end-of-file-fixer` would change anything. No workflow file needed —
-      replaces the local `pre-commit` job in `ci.yml` once installed.
-      **Action for repo owner**: visit https://pre-commit.ci, sign in with
-      GitHub, click "Add" next to this repo.
+- [x] **Secret scanning + push protection**: enabled 2026-05-09 by repo
+      owner. GitHub now scans every push (and historical commits) for
+      ~200 known token formats and blocks new pushes that contain them.
+- [~] **Coverage badge in README**: deferred. Codecov upload step was
+      removed from `ci.yml` because the repo owner opted not to authorize
+      the Codecov GitHub app. Coverage is still enforced locally and in
+      CI via the `--cov-fail-under=75` gate in `pyproject.toml`. Re-enable
+      by reverting commit that removed the `Upload coverage to Codecov`
+      step + re-adding the badge to `README.md`.
+- [~] **Auto-format bot**: deferred. Repo owner opted not to install
+      pre-commit.ci. The local `pre-commit` job in `ci.yml` still gates
+      every push, so unformatted code can't merge — contributors just
+      have to run `pre-commit run --all-files` themselves before pushing.
 - [x] **Stale issue/PR sweeper**: `.github/workflows/stale.yml` runs
       daily at 09:00 UTC. Issues warn at 60 days idle / close at 74; PRs
       warn at 30 / close at 44. Exempt labels: `security`, `pinned`,
@@ -127,15 +115,16 @@ no cold-start, multi-region, OAuth gating, more memory/CPU.
 
 Settings → Security / Code security and analysis:
 
-- [ ] Dependency graph + Dependabot alerts (free, passive CVE alerts)
-- [ ] Dependabot version updates (auto-PRs)
-- [ ] Secret scanning
-- [ ] Push protection
-- [ ] Private vulnerability reporting
+- [x] Dependency graph + Dependabot alerts (free, passive CVE alerts) — enabled 2026-05-09
+- [x] Dependabot version updates (auto-PRs) — `.github/dependabot.yml`
+- [x] Secret scanning — enabled 2026-05-09
+- [x] Push protection — enabled 2026-05-09
+- [x] Private vulnerability reporting — enabled 2026-05-09
 
 Settings → Branches:
 
-- [ ] Branch protection rule on `main` (require CI, require review)
+- [x] Branch protection rule on `main` (require CI, require review).
+      Configured by repo owner 2026-05-09.
 
 ---
 

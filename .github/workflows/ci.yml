@@ -30,14 +30,7 @@ jobs:
         run: uv run ruff check .
 
       - name: Tests
-        run: uv run pytest --cov-report=xml
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          files: ./coverage.xml
-          flags: unit
-          fail_ci_if_error: false
+        run: uv run pytest
 
   pre-commit:
     runs-on: ubuntu-latest
