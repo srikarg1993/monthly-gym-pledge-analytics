@@ -85,6 +85,19 @@ no cold-start, multi-region, OAuth gating, more memory/CPU.
 
 ---
 
+## Security follow-ups
+
+- [ ] **Rotate leaked GCP service-account key** (HIGH).
+      `gym_pledge/.streamlit/secrets.toml` was tracked in git for many
+      commits because the `.gitignore` rule never matched the actual path.
+      Untracked in commit `10d976f`, but the key is still recoverable from
+      git history. Steps: GCP Console → IAM → Service Accounts → create new
+      key → update Streamlit Cloud secrets + local
+      `gym_pledge/.streamlit/secrets.toml` → disable & delete the old key.
+      Optionally rewrite history with `git filter-repo` to scrub the blob.
+
+---
+
 ## Repo Settings (no code) — backlog
 
 Settings → Security / Code security and analysis:
