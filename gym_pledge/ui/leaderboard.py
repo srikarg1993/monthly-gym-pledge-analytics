@@ -65,9 +65,7 @@ def _render_leaderboard_rows(lb, *, name_col: str, cutoff: int, active_name: str
 
     ranked = lb.copy()
     if "rank" not in ranked.columns:
-        ranked["rank"] = (
-            ranked["qualifying_days"].rank(method="dense", ascending=False).astype(int)
-        )
+        ranked["rank"] = ranked["qualifying_days"].rank(method="dense", ascending=False).astype(int)
 
     ranked = ranked.sort_values(["rank", "qualifying_days", name_col], ascending=[True, False, True])
 
@@ -217,10 +215,7 @@ def _render_workout_calendar(*, df_month: pd.DataFrame, name: str, month_str: st
                 dot_class = "cal-dot cal-dot-hidden"
 
             parts.append(
-                f"<div class='cal-cell'>"
-                f"<div class='{day_class}'>{day}</div>"
-                f"<div class='{dot_class}'></div>"
-                f"</div>"
+                f"<div class='cal-cell'><div class='{day_class}'>{day}</div><div class='{dot_class}'></div></div>"
             )
 
     parts.append("</div></div>")

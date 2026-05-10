@@ -93,10 +93,7 @@ def _calendar_html(*, year: int, month: int, status_by_day: dict[int, str], toda
                 dot_class = "cal-dot cal-dot-hidden"
 
             parts.append(
-                f"<div class='cal-cell'>"
-                f"<div class='{day_class}'>{day}</div>"
-                f"<div class='{dot_class}'></div>"
-                f"</div>"
+                f"<div class='cal-cell'><div class='{day_class}'>{day}</div><div class='{dot_class}'></div></div>"
             )
 
     parts.append("</div></div>")
@@ -245,9 +242,7 @@ def render(*, df: pd.DataFrame, month_selected: str) -> None:
     who = st.selectbox("Select person", people, key="year_calendar_person")
 
     # Full year stats for selected person
-    workout_days, qualifying_days, streak, monthly_df = _year_stats_for_person(
-        df_year, who, name_col, year
-    )
+    workout_days, qualifying_days, streak, monthly_df = _year_stats_for_person(df_year, who, name_col, year)
     q_pct = (qualifying_days / workout_days * 100) if workout_days else 0
 
     st.markdown("#### Full year stats")

@@ -41,9 +41,7 @@ def test_year_from_month_str_invalid_returns_current_year():
 
 
 def test_year_stats_for_person_empty_df():
-    workout_days, qualifying_days, streak, monthly_df = _year_stats_for_person(
-        pd.DataFrame(), "Ann", "name", 2024
-    )
+    workout_days, qualifying_days, streak, monthly_df = _year_stats_for_person(pd.DataFrame(), "Ann", "name", 2024)
     assert workout_days == 0
     assert qualifying_days == 0
     assert streak == 0
@@ -51,9 +49,7 @@ def test_year_stats_for_person_empty_df():
 
 
 def test_year_stats_for_person_none_df():
-    workout_days, qualifying_days, streak, monthly_df = _year_stats_for_person(
-        None, "Ann", "name", 2024
-    )
+    workout_days, qualifying_days, streak, monthly_df = _year_stats_for_person(None, "Ann", "name", 2024)
     assert workout_days == 0
     assert qualifying_days == 0
     assert streak == 0
@@ -75,9 +71,7 @@ def test_year_stats_for_person_computes_totals_and_streak():
             "month": ["2024-01", "2024-01", "2024-01", "2024-02", "2024-02"],
         }
     )
-    workout_days, qualifying_days, streak, monthly_df = _year_stats_for_person(
-        df_year, "Ann", "name", 2024
-    )
+    workout_days, qualifying_days, streak, monthly_df = _year_stats_for_person(df_year, "Ann", "name", 2024)
     assert workout_days == 5
     assert qualifying_days == 4
     assert streak == 3  # Jan 1, 2, 3 consecutive qualifying
@@ -94,9 +88,7 @@ def test_year_stats_for_person_unknown_person_returns_zeros_and_empty_monthly():
     df_year = pd.DataFrame(
         {"name": ["Bob"], "workout_date": [date(2024, 1, 1)], "burnt_250": [True], "month": ["2024-01"]}
     )
-    workout_days, qualifying_days, streak, monthly_df = _year_stats_for_person(
-        df_year, "Ann", "name", 2024
-    )
+    workout_days, qualifying_days, streak, monthly_df = _year_stats_for_person(df_year, "Ann", "name", 2024)
     assert workout_days == 0
     assert qualifying_days == 0
     assert streak == 0
@@ -104,9 +96,7 @@ def test_year_stats_for_person_unknown_person_returns_zeros_and_empty_monthly():
 
 
 def test_monthly_breakdown_chart_html_embeds_data_and_cdn():
-    html = _monthly_breakdown_chart_html(
-        months=["Jan", "Feb"], workouts=[5, 3], qualifying=[4, 2]
-    )
+    html = _monthly_breakdown_chart_html(months=["Jan", "Feb"], workouts=[5, 3], qualifying=[4, 2])
     assert "Jan" in html
     assert "Feb" in html
     assert "5" in html
@@ -114,5 +104,5 @@ def test_monthly_breakdown_chart_html_embeds_data_and_cdn():
     assert "4" in html
     assert "2" in html
     assert "apexcharts" in html.lower()
-    assert "data-type=\"bar\"" in html
-    assert "data-type=\"area\"" in html
+    assert 'data-type="bar"' in html
+    assert 'data-type="area"' in html

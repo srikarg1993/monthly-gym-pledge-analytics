@@ -1,0 +1,25 @@
+# Enforce consistent line endings across platforms.
+# - Text files normalize to LF in the git index (regardless of OS).
+# - Windows checkouts get CRLF on disk via core.autocrlf=true; Linux/Mac get LF.
+# This pairs with the ``mixed-line-ending --fix=lf`` pre-commit hook so the
+# index never drifts.
+* text=auto eol=lf
+
+# Shell scripts must keep LF even on Windows or bash refuses to run them.
+*.sh text eol=lf
+
+# PowerShell is happy with either; default LF for consistency.
+*.ps1 text eol=lf
+
+# Binary types — never normalize.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.db binary
+*.sqlite binary

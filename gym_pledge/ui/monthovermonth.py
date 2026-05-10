@@ -51,11 +51,7 @@ def _build_per_person(df: pd.DataFrame) -> pd.DataFrame:
     if any_workout.empty:
         return pd.DataFrame(columns=["month", "name", "workout_days", "qualifying_days"])
 
-    workouts = (
-        any_workout.groupby(["month", "name"])["workout_date"]
-        .nunique()
-        .reset_index(name="workout_days")
-    )
+    workouts = any_workout.groupby(["month", "name"])["workout_date"].nunique().reset_index(name="workout_days")
     qualifying = (
         any_workout[any_workout["burnt_250"]]
         .groupby(["month", "name"])["workout_date"]
@@ -111,9 +107,7 @@ def _build_participation_table(per_person: pd.DataFrame, months: list[str]) -> p
     with_cutoff = per_person.copy()
     with_cutoff["winner_cutoff"] = with_cutoff["month"].map(winner_cutoff_for_month).astype(int)
     winners_by_month = (
-        with_cutoff[with_cutoff["qualifying_days"] >= with_cutoff["winner_cutoff"]]
-        .groupby("month")["name"]
-        .nunique()
+        with_cutoff[with_cutoff["qualifying_days"] >= with_cutoff["winner_cutoff"]].groupby("month")["name"].nunique()
     )
     first_month_by_name = per_person.groupby("name")["month"].min()
 

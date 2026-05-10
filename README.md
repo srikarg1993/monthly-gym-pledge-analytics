@@ -1,6 +1,14 @@
 # Monthly Gym Pledge Analytics
 
+[![ci](https://github.com/srikarg1993/monthly-gym-pledge-analytics/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/srikarg1993/monthly-gym-pledge-analytics/actions/workflows/ci.yml)
+[![codeql](https://github.com/srikarg1993/monthly-gym-pledge-analytics/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/srikarg1993/monthly-gym-pledge-analytics/actions/workflows/codeql.yml)
+[![python](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
+[![ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 Streamlit dashboard for a monthly fitness pledge, backed by a Google Form and Google Sheet.
+
+> AI agents working on this repo: read [`agents.md`](agents.md) first. It captures the project's hard rules, layering, visual design language, and skill index.
 
 ## Features
 - Sidebar navigation: About us, Leaderboard, Scorecard, Log Your Workout
@@ -9,11 +17,22 @@ Streamlit dashboard for a monthly fitness pledge, backed by a Google Form and Go
 - Year calendar heatmap and month-over-month trends
 - Workout logging CTA that opens the Google Form
 
+## Documentation
+
+- [`agents.md`](agents.md) — system prompt for any AI agent
+- [`docs/adr/`](docs/adr/) — Architectural Decision Records
+- [`docs/skills/`](docs/skills/) — task-specific recipes (charts, metrics, data loading, UI page, testing)
+- [`CLAUDE.md`](CLAUDE.md) — stub that redirects Claude Code to `agents.md`
+
 ## Tests
 
 ```bash
 pytest tests/
+# with coverage:
+pytest --cov=gym_pledge.data --cov=gym_pledge.config tests/
 ```
+
+Coverage floor: **75 %** on `gym_pledge/data/*` and `gym_pledge/config/*`. UI render functions are not held to this floor — their pure data helpers are.
 
 ## Setup
 1) Install dependencies:
@@ -34,7 +53,7 @@ Example `.streamlit/secrets.toml`:
 type = "service_account"
 project_id = "..."
 private_key_id = "..."
-private_key = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+private_key = "<PASTE PEM-FORMATTED PRIVATE KEY HERE, INCLUDING BEGIN/END LINES>"
 client_email = "..."
 client_id = "..."
 auth_uri = "https://accounts.google.com/o/oauth2/auth"
@@ -60,6 +79,10 @@ streamlit run gym_pledge/dashboard.py
 ## Project layout
 - `gym_pledge/dashboard.py`: app shell and sidebar navigation
 - `gym_pledge/ui/`: UI pages (leaderboard, scorecard, log your workout, about)
-- `gym_pledge/data/`: data loading and cleanup
-- `gym_pledge/data/metrics.py`: data metrics and leaderboard logic
+- `gym_pledge/ui/common.py`: shared chart factories (see [ADR 0005](docs/adr/0005-unified-dark-visual-language.md))
+- `gym_pledge/data/source.py`: Google Sheets I/O, dedupe, column derivation
+- `gym_pledge/data/metrics.py`: pure analytical functions (leaderboard, streaks, lazy logger, frontload/cram)
+- `gym_pledge/config/globals.py`: spreadsheet IDs, cutoff, per-month overrides
+- `gym_pledge/app_time.py`: timezone-aware "now" / "today" (see [ADR 0004](docs/adr/0004-timezone-via-app-time.md))
 - `gym_pledge/styles/theme.css`: app styling
+- `gym_pledge/00_Archive/`: read-only history (see [ADR 0006](docs/adr/0006-archive-folder-policy.md))
