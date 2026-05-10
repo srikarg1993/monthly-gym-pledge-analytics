@@ -42,6 +42,11 @@ service_account.json
 **/.streamlit/secrets.toml
 secrets/
 
+# Mutation testing artifacts
+.mutmut-cache
+mutmut-results.txt
+mutants/
+
 # Claude / agent scratch
 .claude/settings.json
 .claude/worktrees/

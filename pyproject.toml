@@ -35,4 +35,28 @@ known-first-party = ["app_time", "config", "data", "ui"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q --cov=data --cov=config --cov-report=term-missing --cov-fail-under=75"
+addopts = "-q --strict-markers --strict-config --cov=data --cov=config --cov-branch --cov-report=term-missing --cov-fail-under=75"
+
+[tool.coverage.run]
+# `data` and `config` resolve to gym_pledge/data and gym_pledge/config because
+# tests insert gym_pledge/ onto sys.path themselves (see top of any tests/*.py).
+# Coverage starts before pytest collection so it sees the same import names.
+branch = true
+source = ["data", "config"]
+
+[tool.coverage.report]
+# Surface partial-branch misses in the terminal report.
+show_missing = true
+skip_covered = false
+
+[tool.mutmut]
+# Mutation testing — see docs/skills/mutation-testing.md for the full recipe.
+# Pinned to mutmut<3 because v3 is WSL-only on Windows
+# (https://github.com/boxed/mutmut/issues/397).
+#
+# NOTE: the `runner` below uses bare `python` which works on Linux/macOS and in
+# CI. On Windows, bare `python` may hit the Microsoft Store stub — invoke
+# manually with the absolute venv path as documented in the skill doc.
+paths_to_mutate = "gym_pledge/data/"
+runner = "python -m pytest -x -q --no-cov"
+tests_dir = "tests/"

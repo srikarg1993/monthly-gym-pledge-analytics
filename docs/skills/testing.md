@@ -10,16 +10,30 @@ in a UI module.
 - Tests insert `gym_pledge/` onto `sys.path` themselves (see top of any
   existing test file). No `pip install -e .` needed.
 - Run with: `python -m pytest tests/ -q`.
+- `pyproject.toml` enables `--strict-markers` and `--strict-config` so a
+  typo in a `@pytest.mark.foo` decorator or in `[tool.pytest.ini_options]`
+  fails fast instead of silently no-op'ing. If you add a new marker,
+  declare it under `[tool.pytest.ini_options] markers = [...]`.
 
 ## Coverage floor
 
-- **75 %** on `gym_pledge/data/*` and `gym_pledge/config/*`. Measure with:
-  ```bash
-  python -m pytest --cov=gym_pledge.data --cov=gym_pledge.config tests/
-  ```
+- **75 %** on `gym_pledge/data/*` and `gym_pledge/config/*`. Measured with
+  **branch coverage** enabled (see `[tool.coverage.run] branch = true` in
+  `pyproject.toml`). The terminal report has a `BrPart` column showing
+  partial-branch misses. Investigate any non-zero `BrPart` count before
+  shipping.
+- Run with: `python -m pytest` (the `addopts` in `pyproject.toml` already
+  pass `--cov=data --cov=config --cov-branch --cov-fail-under=75`).
 - UI render functions are not held to this floor (their `_build_*` helpers
   are).
 - Chart specs in `ui/common.py` are not snapshot-tested.
+
+## Beyond coverage: mutation testing
+
+Coverage tells you "did this line run?". Mutation testing tells you "would
+my test catch a bug here?". Run periodically (not in CI) — see
+[`docs/skills/mutation-testing.md`](mutation-testing.md) for the full
+recipe.
 
 ## What every new `data/*` function needs
 

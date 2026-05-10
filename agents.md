@@ -183,6 +183,7 @@ the task before improvising:
 - `docs/skills/data-loading.md` — touching Google Sheets I/O, caching, or `clean()`.
 - `docs/skills/ui-page.md` — adding a new sidebar page.
 - `docs/skills/testing.md` — writing tests, fixtures, and coverage expectations.
+- `docs/skills/mutation-testing.md` — finding fake-green tests with mutmut.
 - `docs/skills/commit-messages.md` — writing high-signal git commit messages.
 - `docs/skills/ci-workflows.md` — adding or modifying GitHub Actions workflows.
 
