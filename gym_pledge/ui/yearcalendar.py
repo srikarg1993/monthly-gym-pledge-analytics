@@ -1,19 +1,26 @@
-"""Year calendar UI rendering helper."""
+"""Year calendar UI rendering helper.
+
+Replaces the previous ApexCharts CDN dependency (P1-12) with native
+Altair charts so the page renders without an external script. Escapes
+all dynamic names before HTML/SVG injection (P0-02). Splits the dense
+single-page layout into tabs (P2-25) so mobile users aren't asked to
+scroll past 12 calendar grids to find the chart they wanted.
+"""
+
+from __future__ import annotations
 
 import calendar
-import json
 from datetime import datetime
 
+import altair as alt
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 
 from app_time import today_app
 from data.metrics import longest_streak
 from ui.common import render_styled_table
-
-# ApexCharts CDN (no local install). Toggle: Bar / Area
-APEXCHARTS_CDN = "https://cdn.jsdelivr.net/npm/apexcharts@3.45.2/dist/apexcharts.min.js"
+from ui.escape import safe_html
+from ui.theme import ALT_GRID, ALT_MUTED, ALT_PRIMARY, ALT_TEXT, GROUP_BRIGHT, WINNER_BRIGHT
 
 
 def _name_col(df: pd.DataFrame) -> str:
@@ -24,8 +31,8 @@ def _year_from_month_str(month_str: str | None) -> int:
     if month_str:
         try:
             return int(str(month_str).split("-")[0])
-        except Exception:
-            pass
+        except (ValueError, AttributeError, IndexError):
+            return today_app().year
     return today_app().year
 
 
@@ -103,7 +110,10 @@ def _calendar_html(*, year: int, month: int, status_by_day: dict[int, str], toda
 def _year_stats_for_person(
     df_year: pd.DataFrame, name: str, name_col: str, year: int
 ) -> tuple[int, int, int, pd.DataFrame]:
-    """Compute full-year stats for one person. Returns (workout_days, qualifying_days, longest_streak, monthly_df)."""
+    """Compute full-year stats for one person.
+
+    Returns ``(workout_days, qualifying_days, longest_streak, monthly_df)``.
+    """
     if df_year is None or df_year.empty or name_col not in df_year.columns:
         return 0, 0, 0, pd.DataFrame()
 
@@ -114,7 +124,6 @@ def _year_stats_for_person(
     workout_days = int(person["workout_date"].nunique())
     qual = person[person["burnt_250"]]
     qualifying_days = int(qual["workout_date"].nunique())
-    # Longest streak of consecutive qualifying days across the full year (can span months)
     streak = longest_streak(qual["workout_date"].dropna().tolist())
 
     monthly_rows = []
@@ -136,69 +145,50 @@ def _year_stats_for_person(
     return workout_days, qualifying_days, streak, monthly_df
 
 
-def _monthly_breakdown_chart_html(months: list, workouts: list, qualifying: list) -> str:
-    """Build HTML/JS for ApexCharts (CDN) with Bar / Area icon toggle. No extra deps."""
-    data_js = json.dumps({"categories": months, "workouts": workouts, "qualifying": qualifying})
-    btn_style = (
-        "border:none;background:rgba(28,36,60,0.9);color:#A0A4B3;cursor:pointer;padding:6px 10px;"
-        "border-radius:6px;margin-right:4px;border:1px solid rgba(255,255,255,0.15);"
+def _altair_monthly_chart(monthly_df: pd.DataFrame) -> alt.Chart:
+    """Native Altair grouped bar chart for monthly Workouts / Qualifying.
+
+    Replaces the prior ApexCharts CDN embed. No external network dep,
+    no JS injection, native Altair tooltips and theming.
+    """
+    if monthly_df is None or monthly_df.empty:
+        return alt.Chart(pd.DataFrame()).mark_bar()
+
+    long = monthly_df.melt(id_vars="Month", var_name="Series", value_name="Count")
+    month_order = monthly_df["Month"].tolist()
+    series_order = ["Workouts", "Qualifying"]
+    color_scale = alt.Scale(
+        domain=series_order,
+        range=[GROUP_BRIGHT, WINNER_BRIGHT],
     )
-    btn_active = "background:rgba(99,102,241,0.35);color:#E4E6EB;border-color:rgba(99,102,241,0.6);"
-    return f"""
-<div id="monthly-chart-toolbar" style="margin:0 0 8px 0;display:flex;align-items:center;gap:4px;">
-  <span style="color:#A0A4B3;font-size:12px;margin-right:6px;">Chart:</span>
-  <button type="button" class="chart-type-btn" data-type="bar" title="Bar chart" style="{btn_style}{btn_active}" id="btn-bar">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5"><rect x="4" y="14" width="4" height="6"/><rect x="10" y="10" width="4" height="10"/><rect x="16" y="6" width="4" height="14"/></svg>
-  </button>
-  <button type="button" class="chart-type-btn" data-type="area" title="Area chart" style="{btn_style}" id="btn-area">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" fill-opacity="0.3" stroke="currentColor" stroke-width="1.5"><path d="M3 17l6-6 4 4 8-12v0" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  </button>
-</div>
-<div id="monthly-apex-chart" style="min-height:280px;"></div>
-<script src="{APEXCHARTS_CDN}"></script>
-<script>
-(function() {{
-  var raw = {data_js};
-  var categories = raw.categories;
-  var series = [
-    {{ name: "Workouts", data: raw.workouts }},
-    {{ name: "Qualifying", data: raw.qualifying }}
-  ];
-  var chartEl = document.getElementById("monthly-apex-chart");
-  var chart = null;
-  var activeStyle = "{btn_active}";
-  var defaultStyle = "{btn_style}";
-  function setActive(type) {{
-    document.querySelectorAll(".chart-type-btn").forEach(function(btn) {{
-      btn.style.cssText = (btn.getAttribute("data-type") === type ? defaultStyle + activeStyle : defaultStyle);
-    }});
-  }}
-  function render(type) {{
-    if (chart) chart.destroy();
-    var opts = {{
-      chart: {{ type: type, height: 280, toolbar: {{ show: false }}, background: "transparent" }},
-      series: series,
-      xaxis: {{ categories: categories, labels: {{ style: {{ colors: "#A0A4B3" }} }} }},
-      yaxis: {{ labels: {{ style: {{ colors: "#A0A4B3" }} }} }},
-      legend: {{ labels: {{ colors: "#A0A4B3" }} }},
-      colors: ["#6b9bd1", "#4caf50"],
-      grid: {{ borderColor: "rgba(255,255,255,0.1)", strokeDashArray: 4 }},
-      tooltip: {{ theme: "dark" }}
-    }};
-    if (type === "bar") {{
-      opts.plotOptions = {{ bar: {{ horizontal: false, stacked: false, columnWidth: "45%" }} }};
-    }}
-    chart = new ApexCharts(chartEl, opts);
-    chart.render();
-    setActive(type);
-  }}
-  document.querySelectorAll(".chart-type-btn").forEach(function(btn) {{
-    btn.addEventListener("click", function() {{ render(this.getAttribute("data-type")); }});
-  }});
-  render("bar");
-}})();
-</script>
-"""
+
+    bars = (
+        alt.Chart(long)
+        .mark_bar(cornerRadiusEnd=4)
+        .encode(
+            x=alt.X("Month:N", sort=month_order, title=None, axis=alt.Axis(labelAngle=0)),
+            xOffset=alt.XOffset("Series:N", sort=series_order),
+            y=alt.Y("Count:Q", title=None),
+            color=alt.Color("Series:N", scale=color_scale, legend=alt.Legend(orient="top", title=None)),
+            tooltip=[
+                alt.Tooltip("Month:N"),
+                alt.Tooltip("Series:N"),
+                alt.Tooltip("Count:Q", format="d"),
+            ],
+        )
+        .properties(height=280, background="#0B1220")
+    )
+    return (
+        bars.configure_view(strokeOpacity=0, fill="#0B1220")
+        .configure_axis(
+            labelColor=ALT_MUTED,
+            titleColor=ALT_TEXT,
+            domainColor=ALT_GRID,
+            gridColor=ALT_GRID,
+            tickColor=ALT_GRID,
+        )
+        .configure_legend(labelColor=ALT_TEXT, titleColor=ALT_TEXT)
+    )
 
 
 def _render_year_calendar(*, df_year: pd.DataFrame, name: str, year: int, name_col: str) -> None:
@@ -215,7 +205,7 @@ def _render_year_calendar(*, df_year: pd.DataFrame, name: str, year: int, name_c
         month_label = datetime(year, month, 1).strftime("%b")
 
         parts.append("<div class='calendar-month'>")
-        parts.append(f"<div class='calendar-month-title'>{month_label}</div>")
+        parts.append(f"<div class='calendar-month-title'>{safe_html(month_label)}</div>")
         parts.append(_calendar_html(year=year, month=month, status_by_day=status_by_day, today=today, mini=True))
         parts.append("</div>")
 
@@ -241,49 +231,60 @@ def render(*, df: pd.DataFrame, month_selected: str) -> None:
     people = sorted(people_source[name_col].dropna().unique().tolist())
     who = st.selectbox("Select person", people, key="year_calendar_person")
 
-    # Full year stats for selected person
     workout_days, qualifying_days, streak, monthly_df = _year_stats_for_person(df_year, who, name_col, year)
+
+    # Tab the dense single-page layout into Overview / Monthly / Calendar
+    # so mobile users aren't asked to scroll past 12 mini-calendars to
+    # see headline numbers (adversarial finding P2-25).
+    overview_tab, breakdown_tab, calendar_tab = st.tabs(["Overview", "Monthly breakdown", "Calendar"])
+
     q_pct = (qualifying_days / workout_days * 100) if workout_days else 0
 
-    st.markdown("#### Full year stats")
-    st.caption("Streak = longest run of consecutive qualifying days in the year (can span months).")
-    stat_cols = st.columns(4, gap="small")
-    stats = [
-        ("Total workout days", f"{workout_days}"),
-        ("Qualifying workouts", f"{qualifying_days}"),
-        ("Q / W %", f"{q_pct:.1f}%"),
-        ("Longest qualifying streak (across full year)", f"{streak} days"),
-    ]
-    for c, (label, value) in zip(stat_cols, stats, strict=False):
-        with c:
-            st.markdown(
-                f"""
-                <div style='background: rgba(255,255,255,0.02); padding:14px; border-radius:8px; text-align:center;'>
-                  <div style='font-size:20px; font-weight:700; color:#fff;'>{value}</div>
-                  <div style='font-size:12px; color:#9aa0ab; margin-top:6px;'>{label}</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+    with overview_tab:
+        st.markdown("#### Full year stats")
+        st.caption("Streak = longest run of consecutive qualifying days in the year (can span months).")
+        stat_cols = st.columns(4, gap="small")
+        stats = [
+            ("Total workout days", f"{workout_days}"),
+            ("Qualifying workouts", f"{qualifying_days}"),
+            ("Q / W %", f"{q_pct:.1f}%"),
+            ("Longest qualifying streak (across full year)", f"{streak} days"),
+        ]
+        for c, (label, value) in zip(stat_cols, stats, strict=False):
+            with c:
+                st.markdown(
+                    f"""
+                    <div style='background: rgba(255,255,255,0.02); padding:14px; border-radius:8px; text-align:center;'>
+                      <div style='font-size:20px; font-weight:700; color:#fff;'>{safe_html(value)}</div>
+                      <div style='font-size:12px; color:#9aa0ab; margin-top:6px;'>{safe_html(label)}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
-    if not monthly_df.empty:
-        st.markdown("#### Monthly breakdown")
-        months = monthly_df["Month"].tolist()
-        workouts = monthly_df["Workouts"].tolist()
-        qualifying = monthly_df["Qualifying"].tolist()
-        html = _monthly_breakdown_chart_html(months, workouts, qualifying)
-        components.html(html, height=340)
-        with st.expander("View as table"):
-            render_styled_table(monthly_df, max_rows=12)
+    with breakdown_tab:
+        if not monthly_df.empty:
+            st.markdown("#### Monthly breakdown")
+            chart = _altair_monthly_chart(monthly_df)
+            st.altair_chart(chart, use_container_width=True)
+            with st.expander("View as table"):
+                render_styled_table(monthly_df, max_rows=12)
+        else:
+            st.caption("No monthly data to display.")
 
-    st.markdown(
-        """
-        <div class="calendar-legend">
-          <span class="legend-item"><span class="legend-swatch legend-qualifying"></span>Qualifying</span>
-          <span class="legend-item"><span class="legend-swatch legend-regular"></span>Workout</span>
-          <span class="legend-item"><span class="legend-dot legend-missed"></span>Missed day</span>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    _render_year_calendar(df_year=df_year, name=who, year=year, name_col=name_col)
+    with calendar_tab:
+        st.markdown(
+            """
+            <div class="calendar-legend">
+              <span class="legend-item"><span class="legend-swatch legend-qualifying"></span>Qualifying</span>
+              <span class="legend-item"><span class="legend-swatch legend-regular"></span>Workout</span>
+              <span class="legend-item"><span class="legend-dot legend-missed"></span>No log</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        _render_year_calendar(df_year=df_year, name=who, year=year, name_col=name_col)
+
+
+# Avoid `ALT_PRIMARY` unused-import lint when the module is later split.
+_ = ALT_PRIMARY

@@ -19,6 +19,7 @@ from ui.common import (
     render_lazy_bubble_clusters,
     weekday_radar_figure,
 )
+from ui.escape import safe_html
 
 STREAK_KEY = "scorecard_streak_participant"
 WEEKDAY_RADAR_KEY = "scorecard_weekday_radar_participant"
@@ -441,8 +442,8 @@ def render(*, lb, df_month, cutoff: int) -> None:
     lazy_df = _build_lazy_df(df_month)
     style_df = _build_style_balance_df(frontload_vs_cram(df_month))
 
-    st.markdown("### This month's winners!! ")
-    st.markdown("Congratulations guys!! Each one of you burnt 4000 + calories this month.")
+    st.markdown("### Winners this month")
+    st.markdown("Reached the monthly qualifying target. Nice work.")
 
     if winner_df.empty:
         st.caption("No winners yet.")
@@ -455,7 +456,7 @@ def render(*, lb, df_month, cutoff: int) -> None:
                         f"""
                         <div style="border-radius:8px; padding:12px; text-align:center; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
                           <div style="font-size:60px">&#127942;</div>
-                          <div style="font-weight:600; margin-top:6px">{row["name"]}</div>
+                          <div style="font-weight:600; margin-top:6px">{safe_html(row["name"])}</div>
                           <div style="color:#9aa0ab;">{int(row["qualifying_days"])} qualifying workouts</div>
                         </div>
                         """,
@@ -663,18 +664,30 @@ def render(*, lb, df_month, cutoff: int) -> None:
             radar_focus = _resolve_weekday_focus(lb)
 
         st.caption(
-            "Left: the entire group's qualifying cadence. Right: the selected participant's. Each chart auto-scales to its own data so the participant's shape stays readable."
+            "Left: the entire group's qualifying cadence. Right: the selected participant's. "
+            "Both charts use a shared radial scale so shapes can be compared honestly."
         )
 
         if df_month is None or df_month.empty or radar_focus is None:
             st.caption("No workout data for the selected month.")
         else:
+            import math
+
+            import matplotlib.pyplot as _plt
+
             group_counts = _build_qualifying_weekday_counts(df_month)
             candidate_counts = _build_qualifying_weekday_counts(df_month, name=radar_focus)
+
+            # Shared radial scale for honest visual comparison (P2-26). Take
+            # the max of either series so neither chart appears "smaller" by
+            # accident.
+            shared_max = max(max(group_counts, default=0), max(candidate_counts, default=0), 1)
+            shared_r_max = max(int(math.ceil(shared_max * 1.1)), 2)
 
             group_fig = weekday_radar_figure(
                 weekday_order=WEEKDAY_ORDER,
                 group_qualifying=group_counts,
+                r_max=shared_r_max,
                 show_legend=False,
             )
             candidate_fig = weekday_radar_figure(
@@ -682,6 +695,7 @@ def render(*, lb, df_month, cutoff: int) -> None:
                 group_qualifying=[0] * len(WEEKDAY_ORDER),
                 candidate_qualifying=candidate_counts,
                 candidate_label=radar_focus,
+                r_max=shared_r_max,
                 show_legend=False,
             )
 
@@ -692,9 +706,11 @@ def render(*, lb, df_month, cutoff: int) -> None:
                     unsafe_allow_html=True,
                 )
                 st.pyplot(group_fig, use_container_width=True)
+                _plt.close(group_fig)
             with right:
                 st.markdown(
-                    f"<div style='text-align:center;font-weight:700;color:#5FE1C7;font-size:15px;margin-bottom:4px;letter-spacing:0.04em;text-transform:uppercase;'>{radar_focus}</div>",
+                    f"<div style='text-align:center;font-weight:700;color:#5FE1C7;font-size:15px;margin-bottom:4px;letter-spacing:0.04em;text-transform:uppercase;'>{safe_html(radar_focus)}</div>",
                     unsafe_allow_html=True,
                 )
                 st.pyplot(candidate_fig, use_container_width=True)
+                _plt.close(candidate_fig)

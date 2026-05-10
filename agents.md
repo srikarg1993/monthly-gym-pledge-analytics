@@ -292,3 +292,47 @@ commit after all five pass:
 - Use [`scripts/ci-status.ps1`](scripts/ci-status.ps1) (requires `gh` CLI)
   or `gh run list --branch <b>` to verify CI is green. Don't assume.
 - If `gh` isn't authed yet, fetch the Actions web page directly.
+
+---
+
+## 11. Adversarial self-review (mandatory before "looks good")
+
+Lesson from `docs/adversarial/2026-05-10-adversarial-feedback.md`: tests
+green + ruff clean is **not** the same as "the app is correct". Before
+declaring any non-trivial change done — and at minimum every ~10 PRs even
+without a specific trigger — run an **adversarial self-review** as parallel
+subagents (Rule 0):
+
+1. **Hostile-input pass** — if every dynamic string from a sheet, form, or
+   user input were `<script>alert(1)</script>` or `<img onerror=...>`, would
+   the rendered HTML/SVG escape it? Every `unsafe_allow_html=True` site,
+   every `st.markdown` with interpolation, every raw SVG `<text>` is suspect.
+   Use `html.escape` at the boundary, or prefer native `st.dataframe`.
+2. **Failure-mode pass** — what happens if Sheets returns `APIError`, an
+   empty df, a missing column, or whitespace-mangled names? Silent
+   degradation (e.g. roster filter falls back to "everyone") is the worst
+   bug class. Either fail loud (`st.error` + `st.stop`) or surface the
+   degradation in a debug expander. Never lie about counts.
+3. **Doc/code drift pass** — re-read `README.md`, `agents.md`, About page,
+   `config/globals.py`, and ADRs side-by-side with the code. Hard-coded
+   business rules in copy MUST come from config, not literals. The agent
+   domain model in `agents.md` MUST match `clean()` output dtypes.
+4. **Shipped-surface coverage pass** — does the test suite exercise the
+   actual user path (routing, page render, I/O boundaries with mocked
+   sheet, hidden roster fallbacks)? Coverage % on pure helpers is
+   comforting and misleading. Add a Streamlit `AppTest` smoke per page.
+5. **Polish-vs-rigor pass** — gradients are easy to admire and easy to
+   ship. Escaping `<`, closing matplotlib figures, narrowing `except
+   Exception`, and adding a type hint are boring and invisible. When both
+   are open, bias toward the boring fix.
+
+Triggers (run the pass automatically when any apply):
+- Touched `data/source.py`, `ui/common.py`, or any raw HTML/SVG injection.
+- Added a new page, chart, or sheet column.
+- Added a new business rule (cutoff override, qualification rule).
+- About to write "this looks good" / "I'm done" in a handoff message.
+- ~10 PRs since the last adversarial pass.
+
+Output: each pass either produces zero findings (recorded in commit body)
+or produces a fix in the same PR. Findings without fixes go to
+[`docs/backlog.md`](docs/backlog.md) with a P-rating and a date.

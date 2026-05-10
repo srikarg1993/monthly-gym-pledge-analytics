@@ -32,6 +32,26 @@ jobs:
       - name: Tests
         run: uv run pytest
 
+  audit:
+    # Dependency vulnerability scan (adversarial P2-15). Runs in parallel
+    # with `test` and `pre-commit`. Treat findings as advisory for now —
+    # we do not gate merges on a moving CVE feed for a private app.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Audit production dependencies
+        run: pip-audit -r requirements.txt --strict --disable-pip
+        continue-on-error: true
+
   pre-commit:
     runs-on: ubuntu-latest
     steps:

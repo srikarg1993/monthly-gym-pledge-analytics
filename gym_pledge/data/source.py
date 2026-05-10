@@ -1,6 +1,11 @@
 """Data source helpers: reading and cleaning raw sheet data."""
 
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from enum import Enum
 
 import gspread
 import pandas as pd
@@ -19,11 +24,38 @@ from config.globals import (
     WORKSHEET_NAME,
 )
 
+# ---------------------------------------------------------------------------
+# Whitespace-collapse regex used by `normalize_name`. Compiled once.
+# ---------------------------------------------------------------------------
+_WHITESPACE_RE = re.compile(r"\s+")
+
+
+# ---------------------------------------------------------------------------
+# Authorized gspread client.
+#
+# `st.cache_data` caches function *outputs*; the gspread client itself is a
+# resource (network connection + token state) and should be cached via
+# `st.cache_resource` so we don't rebuild credentials on every cache miss
+# of the data layer (adversarial P3-14).
+# ---------------------------------------------------------------------------
+@st.cache_resource(show_spinner=False)
+def _get_gspread_client() -> gspread.Client:
+    creds = Credentials.from_service_account_info(
+        dict(st.secrets["gcp_service_account"]),
+        scopes=SCOPES,
+    )
+    return gspread.authorize(creds)
+
 
 @st.cache_data(ttl=60, show_spinner=False)
 def read_google_sheet_as_df(spreadsheet_id: str, worksheet_name: str) -> pd.DataFrame:
-    creds = Credentials.from_service_account_info(dict(st.secrets["gcp_service_account"]), scopes=SCOPES)
-    gc = gspread.authorize(creds)
+    """Read a worksheet into a DataFrame using the cached gspread client.
+
+    Empty cells are normalized to ``pd.NA`` and fully-empty rows are
+    dropped. Schema validation is the caller's responsibility — this
+    function only handles the I/O.
+    """
+    gc = _get_gspread_client()
     sh = gc.open_by_key(spreadsheet_id)
     ws = sh.worksheet(worksheet_name)
 
@@ -38,6 +70,37 @@ def read_google_sheet_as_df(spreadsheet_id: str, worksheet_name: str) -> pd.Data
     return df
 
 
+# ---------------------------------------------------------------------------
+# Name normalization.
+#
+# Single helper used by BOTH the form-responses loader and the roster loader
+# so a name like " Ann   Smith " in one sheet can be joined to "Ann Smith"
+# in the other. Without this, the leaderboard silently splits one person
+# across two rows. (Adversarial review P1-04.)
+# ---------------------------------------------------------------------------
+def normalize_name(value: object) -> str:
+    """Return a canonical form of a participant name.
+
+    - Coerces ``NaN`` / ``None`` / ``pd.NA`` to ``""``.
+    - Strips leading/trailing whitespace.
+    - Collapses internal runs of whitespace to a single space.
+    - Drops the literal placeholder strings pandas / Python emit when
+      coercing missing values via ``str(x)`` (``"nan"``, ``"None"``,
+      ``"<NA>"``).
+    """
+    if value is None:
+        return ""
+    try:
+        if pd.isna(value):
+            return ""
+    except (TypeError, ValueError):
+        pass
+    text = _WHITESPACE_RE.sub(" ", str(value)).strip()
+    if text in {"nan", "None", "<NA>"}:
+        return ""
+    return text
+
+
 def _month_label(month_str: str) -> str:
     try:
         dt = datetime.strptime(month_str, "%Y-%m")
@@ -46,38 +109,108 @@ def _month_label(month_str: str) -> str:
     return dt.strftime("%B %Y")
 
 
+# ---------------------------------------------------------------------------
+# Typed `get_users` result.
+#
+# The previous implementation returned ``list[str] | None`` for *every*
+# failure mode (read error, missing column, empty roster, no active users).
+# Callers therefore could not distinguish "Sheets is down" from "no one is
+# In this month" and silently fell back to "everyone with a workout row"
+# — a documented adversarial finding (P0-04 / P1-07).
+# ---------------------------------------------------------------------------
+class GetUsersStatus(str, Enum):
+    OK = "ok"
+    READ_ERROR = "read_error"
+    EMPTY_SHEET = "empty_sheet"
+    MISSING_NAME_COLUMN = "missing_name_column"
+    MISSING_MONTH_COLUMN = "missing_month_column"
+    NO_ACTIVE_USERS = "no_active_users"
+
+
+@dataclass(frozen=True)
+class GetUsersResult:
+    """Typed result for `get_users`.
+
+    `users` is the resolved roster (possibly empty). `status` describes
+    *why* the result looks the way it does so the caller can make a
+    deliberate choice — fall back, warn, or fail loud — instead of
+    treating every failure as "missing data".
+    """
+
+    users: list[str]
+    status: GetUsersStatus
+    message: str = ""
+
+    @property
+    def ok(self) -> bool:
+        return self.status is GetUsersStatus.OK
+
+    def __bool__(self) -> bool:
+        return bool(self.users)
+
+    def __iter__(self):
+        return iter(self.users)
+
+    def __len__(self) -> int:
+        return len(self.users)
+
+
 @st.cache_data(ttl=60, show_spinner=False)
-def get_users(month_str: str | None = None) -> list[str] | None:
+def get_users(month_str: str | None = None) -> GetUsersResult:
+    """Read the active-users roster.
+
+    When ``month_str`` is provided, filter to participants whose status
+    in that month's column matches ``USERS_STATUS_IN_VALUE``. Returns a
+    `GetUsersResult` that distinguishes every failure mode so the caller
+    cannot silently fall back to "everyone".
+    """
     try:
         users_df = read_google_sheet_as_df(SPREADSHEET_ID, USERS_WORKSHEET_NAME)
-    except Exception as e:
-        st.warning("Could not read Users sheet. Check the sheet name and sharing permissions.")
-        st.exception(e)
-        return None
+    except Exception as exc:
+        return GetUsersResult(
+            users=[],
+            status=GetUsersStatus.READ_ERROR,
+            message=f"Could not read Users sheet: {type(exc).__name__}",
+        )
 
     if users_df.empty:
-        st.warning("Users sheet is empty.")
-        return None
+        return GetUsersResult(users=[], status=GetUsersStatus.EMPTY_SHEET, message="Users sheet is empty.")
 
     if USERS_NAME_COLUMN not in users_df.columns:
-        st.warning(f"Users sheet missing column: '{USERS_NAME_COLUMN}'.")
-        return None
+        return GetUsersResult(
+            users=[],
+            status=GetUsersStatus.MISSING_NAME_COLUMN,
+            message=f"Users sheet missing column: '{USERS_NAME_COLUMN}'.",
+        )
 
     if month_str:
         month_label = _month_label(month_str)
-        if month_label and month_label in users_df.columns:
-            in_value = USERS_STATUS_IN_VALUE.strip().lower()
-            status = users_df[month_label].astype(str).str.strip().str.lower()
-            users_df = users_df[status == in_value]
+        if not month_label or month_label not in users_df.columns:
+            # Do NOT silently fall back to "everyone in the sheet" when the
+            # month column is missing. Surface the degradation.
+            return GetUsersResult(
+                users=[],
+                status=GetUsersStatus.MISSING_MONTH_COLUMN,
+                message=(
+                    f"Users sheet has no column for '{month_label or month_str}'. "
+                    "Add the month column to the Venmo Tracker sheet to enable "
+                    "the current-month roster filter."
+                ),
+            )
+        in_value = USERS_STATUS_IN_VALUE.strip().lower()
+        status = users_df[month_label].astype(str).str.strip().str.lower()
+        users_df = users_df[status == in_value]
 
-    names = users_df[USERS_NAME_COLUMN].astype(str).str.strip()
-    names = names.replace("", pd.NA).dropna().drop_duplicates()
-
+    names = users_df[USERS_NAME_COLUMN].apply(normalize_name)
+    names = names[names != ""].drop_duplicates()
     users = names.tolist()
     if not users:
-        st.warning("No users found in Users sheet after filtering.")
-        return None
-    return users
+        return GetUsersResult(
+            users=[],
+            status=GetUsersStatus.NO_ACTIVE_USERS,
+            message="No users found in Users sheet after filtering.",
+        )
+    return GetUsersResult(users=users, status=GetUsersStatus.OK)
 
 
 def normalize_bool(x: object) -> bool:
@@ -92,6 +225,61 @@ def normalize_bool(x: object) -> bool:
         return False
     s = str(x).strip().lower()
     return s in {"yes", "true", "1", "y", "t"}
+
+
+# ---------------------------------------------------------------------------
+# Data-quality report attached to `clean()` output.
+#
+# `clean()` previously dropped malformed rows silently. The leaderboard
+# could undercount a participant and the app would render confidently with
+# the wrong number. The quality report is attached to the returned
+# DataFrame via `df.attrs["quality_report"]` so:
+#
+#   - existing callers that just iterate the DataFrame are unaffected
+#   - debug expanders / admin views can show the drop counts (P1-05)
+# ---------------------------------------------------------------------------
+@dataclass
+class CleanQualityReport:
+    rows_in: int = 0
+    rows_out: int = 0
+    dropped_blank_name: int = 0
+    dropped_nat_timestamp: int = 0
+    dropped_nat_workout_date: int = 0
+    dropped_too_old: int = 0
+    dropped_future: int = 0
+    dropped_logged_in_future: int = 0
+    dropped_bad_calories: int = 0
+    dropped_calories_out_of_range: int = 0
+    dropped_dedupe: int = 0
+    notes: list[str] = field(default_factory=list)
+
+    @property
+    def total_dropped(self) -> int:
+        """Count of rows dropped for *quality* reasons.
+
+        Deliberately excludes ``dropped_dedupe`` — deduplicating
+        ``(name, workout_date)`` and keeping the latest timestamp is
+        normal app behaviour (people resubmit / correct entries) and
+        does not indicate a data-quality problem. The dedupe count is
+        still surfaced via :meth:`as_dict` for visibility when the
+        expander does open for some other reason.
+        """
+        return (
+            self.dropped_blank_name
+            + self.dropped_nat_timestamp
+            + self.dropped_nat_workout_date
+            + self.dropped_too_old
+            + self.dropped_future
+            + self.dropped_logged_in_future
+            + self.dropped_bad_calories
+            + self.dropped_calories_out_of_range
+        )
+
+    def as_dict(self) -> dict:
+        d = dict(self.__dict__)
+        d["total_dropped"] = self.total_dropped
+        d["total_dropped_including_dedupe"] = self.total_dropped + self.dropped_dedupe
+        return d
 
 
 def clean(
@@ -110,24 +298,24 @@ def clean(
 
     1. **Schema check** — required columns must be present (raises otherwise).
     2. **Name normalization** — strip + collapse whitespace; drop blank names.
-    3. **Timestamp parsing** — coerce to datetime; drop rows with NaT timestamp
-       (we can't compute log delay without one).
-    4. **Workout date parsing** — coerce to date; drop rows with NaT
-       workout_date (every downstream metric bins by date).
-    5. **Date sanity** — drop workout_date older than ``MIN_WORKOUT_DATE``
-       (1999-03 typos), drop workout_date in the future relative to ``today``,
-       and drop rows where workout_date is *after* the timestamp date
-       (logging a workout for a date you haven't reached yet).
-    6. **Calorie sanity** — drop genuine non-numeric garbage like "abc",
-       drop negative values, and drop values above ``MAX_CALORIES``. Blank
-       calories are kept as NaN.
-    7. **Boolean reconciliation** — when a numeric calorie value is present,
-       derive ``burnt_250`` from ``calories_burned >= 250`` (overriding the
-       form checkbox so the bool and the number can never disagree).
-    8. **Dedupe** — keep the latest timestamp per ``(name, workout_date)``.
-    9. **Derived columns** — month/dow/dom/log_delay_days/any_workout.
+    3. **Timestamp parsing** — coerce to datetime; drop NaT timestamp rows.
+    4. **Workout date parsing** — coerce to date; drop NaT workout_date rows.
+    5. **Date sanity** — drop too-old / future / logged-in-future rows.
+    6. **Calorie sanity** — drop garbage / out-of-range; keep blanks as NaN.
+    7. **Boolean reconciliation** — when calories present, derive
+       ``burnt_250`` from ``calories_burned >= 250`` and set
+       ``calories_met_250`` to a tri-state nullable boolean (``pd.NA``
+       when calories are blank — adversarial P1-02).
+    8. **Dedupe** — keep latest timestamp per ``(name, workout_date)``.
+    9. **Derived columns** — month / dow (str) / dow_num (int) / dom /
+       log_delay_days (clamped >= 0) / any_workout.
+
+    A `CleanQualityReport` is attached via ``df.attrs["quality_report"]``
+    so admin / debug expanders can surface drop counts without changing
+    the call signature.
     """
     df = df.copy()
+    report = CleanQualityReport(rows_in=len(df))
 
     # --- Stage 1: schema check -------------------------------------------------
     expected = {col_timestamp, col_name, col_wkdate, col_250}
@@ -149,125 +337,140 @@ def clean(
     df = df.rename(columns=rename_map)
 
     # --- Stage 2: name normalization ------------------------------------------
-    df["name"] = df["name_raw"].astype(str).str.strip().str.replace(r"\s+", " ", regex=True)
-    # An empty/whitespace-only name represents a malformed submission. The
-    # ``.astype(str)`` above turns NaN into the literal string "nan", so guard
-    # against that too.
-    blank_name = df["name"].isin({"", "nan", "None", "<NA>"})
+    df["name"] = df["name_raw"].apply(normalize_name)
+    blank_name = df["name"] == ""
     if blank_name.any():
+        report.dropped_blank_name = int(blank_name.sum())
         df = df[~blank_name].reset_index(drop=True)
 
     # --- Stage 3: timestamp parsing -------------------------------------------
     df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
-    # No timestamp -> we can't tell when the row was logged, which breaks
-    # log-delay metrics and dedupe ordering.
-    df = df[df["timestamp"].notna()].reset_index(drop=True)
+    nat_ts = df["timestamp"].isna()
+    if nat_ts.any():
+        report.dropped_nat_timestamp = int(nat_ts.sum())
+        df = df[~nat_ts].reset_index(drop=True)
     df["timestamp_date"] = df["timestamp"].dt.date
 
     # --- Stage 4: workout date parsing ----------------------------------------
     df["workout_date"] = pd.to_datetime(df["workout_date_raw"], errors="coerce").dt.date
-    # Every downstream metric (leaderboard, frontload/cram, year calendar,
-    # weekday cadence) buckets rows by ``workout_date``. A NaT here means the
-    # whole row is unusable.
-    df = df[df["workout_date"].notna()].reset_index(drop=True)
+    nat_wd = df["workout_date"].isna()
+    if nat_wd.any():
+        report.dropped_nat_workout_date = int(nat_wd.sum())
+        df = df[~nat_wd].reset_index(drop=True)
 
     df["burnt_250"] = df["burnt_250_raw"].apply(normalize_bool)
 
     # --- Stage 5: date sanity -------------------------------------------------
     today = today_app()
 
-    # 5a. Implausibly old: e.g. "1999-03-15" picked by accident in the form.
     too_old = df["workout_date"].apply(lambda d: d < MIN_WORKOUT_DATE)
     if too_old.any():
+        report.dropped_too_old = int(too_old.sum())
         df = df[~too_old].reset_index(drop=True)
 
-    # 5b. Future-dated: typos when backfilling the date picker.
     future_workout = df["workout_date"].apply(lambda d: d > today)
     if future_workout.any():
+        report.dropped_future = int(future_workout.sum())
         df = df[~future_workout].reset_index(drop=True)
 
-    # 5c. Logged a workout for a date *after* the form was submitted. Even
-    # when both dates are in the past, this is logically impossible — you
-    # cannot have done a workout on a day you hadn't reached when you wrote
-    # the form. Almost always a date-picker typo.
-    #
-    # Tolerance: allow a 1-day grace window so that a tz-aware timestamp
-    # whose UTC date crosses midnight (e.g. user submits at 11:59 PM local,
-    # which is the next calendar day in UTC) doesn't accidentally flag a
-    # legitimate same-day log. Anything further out (1999, 2030, etc.) is
-    # still caught.
     grace = timedelta(days=1)
-    logged_in_future = df.apply(lambda r: r["workout_date"] > (r["timestamp_date"] + grace), axis=1)
-    if logged_in_future.any():
-        df = df[~logged_in_future].reset_index(drop=True)
+    if not df.empty:
+        logged_in_future = df.apply(lambda r: r["workout_date"] > (r["timestamp_date"] + grace), axis=1)
+        if logged_in_future.any():
+            report.dropped_logged_in_future = int(logged_in_future.sum())
+            df = df[~logged_in_future].reset_index(drop=True)
 
     # --- Stage 6: calorie sanity ----------------------------------------------
     if has_calories:
         df["calories_burned"] = pd.to_numeric(df["calories_raw"], errors="coerce")
-        # 6a. Genuine garbage like "abc": raw column was non-empty but failed
-        # numeric coercion. Blanks are kept (-> NaN calories).
         raw_filled = df["calories_raw"].notna() & (df["calories_raw"].astype(str).str.strip() != "")
         bad_input = raw_filled & df["calories_burned"].isna()
         if bad_input.any():
+            report.dropped_bad_calories = int(bad_input.sum())
             df = df[~bad_input].reset_index(drop=True)
 
-        # 6b. Out-of-range numerics (negative or above sane ceiling).
         in_range = df["calories_burned"].isna() | (
             (df["calories_burned"] >= 0) & (df["calories_burned"] <= MAX_CALORIES)
         )
-        df = df[in_range].reset_index(drop=True)
+        out_of_range_count = int((~in_range).sum())
+        if out_of_range_count:
+            report.dropped_calories_out_of_range = out_of_range_count
+            df = df[in_range].reset_index(drop=True)
 
         # --- Stage 7: bool/calorie reconciliation -----------------------------
-        # When a numeric calorie value is present, it is the ground truth and
-        # we override the self-reported checkbox. (Otherwise we trust the
-        # form bool.)
         has_num = df["calories_burned"].notna()
         df.loc[has_num, "burnt_250"] = df.loc[has_num, "calories_burned"] >= 250
 
-        df["calories_met_250"] = df["calories_burned"] >= 250
+        # Use a nullable boolean dtype so blank-calorie rows surface as
+        # `pd.NA` (= "calories not provided"), distinct from `False`
+        # (= "provided and below 250"). Adversarial finding P1-02.
+        met = pd.array([pd.NA] * len(df), dtype="boolean")
+        if has_num.any():
+            mask_values = has_num.to_numpy()
+            met[mask_values] = (df.loc[has_num, "calories_burned"] >= 250).astype(bool).to_numpy()
+        df["calories_met_250"] = met
     else:
         df["calories_burned"] = pd.NA
-        df["calories_met_250"] = pd.NA
+        df["calories_met_250"] = pd.array([pd.NA] * len(df), dtype="boolean")
 
     # --- Stage 8: dedupe ------------------------------------------------------
     if dedupe:
+        before = len(df)
         df = (
             df.sort_values("timestamp", ascending=True)
             .drop_duplicates(subset=["name", "workout_date"], keep="last")
             .reset_index(drop=True)
         )
+        report.dropped_dedupe = before - len(df)
 
     # --- Stage 9: derived columns --------------------------------------------
     df["any_workout"] = df["workout_date"].notna()
     df["workout_dt"] = pd.to_datetime(df["workout_date"], errors="coerce")
     month_period = df["workout_dt"].dt.to_period("M")
     df["month"] = month_period.astype(str).where(month_period.notna(), pd.NA)
+    # `dow` retained as the day-name string (used by every existing UI as
+    # a display label and groupby key). `dow_num` added for callers that
+    # need a deterministic integer (Mon=0..Sun=6). The `agents.md` domain
+    # model has been updated to match this dual representation.
     df["dow"] = df["workout_dt"].dt.day_name()
+    df["dow_num"] = df["workout_dt"].dt.dayofweek.astype("Int64")
     df["dom"] = df["workout_dt"].dt.day
 
-    df["log_delay_days"] = (
+    raw_delay = (
         pd.to_datetime(df["timestamp_date"], errors="coerce") - pd.to_datetime(df["workout_date"], errors="coerce")
     ).dt.days
+    # Clamp negative delays (timezone-grace artifacts) to 0 — "logged the
+    # same day" — instead of leaving e.g. -1 to skew Lazy Logger averages.
+    # Adversarial finding P1-06.
+    df["log_delay_days"] = raw_delay.clip(lower=0)
 
+    report.rows_out = len(df)
+    df.attrs["quality_report"] = report
     return df
 
 
 @st.cache_data(ttl=60, show_spinner=False)
 def get_data() -> pd.DataFrame:
+    """Read + clean the Form Responses sheet.
+
+    Surfaces user-friendly errors at the UI boundary. The full exception
+    is shown in a debug expander rather than via `st.exception` so we
+    don't leak stack traces into the main view (adversarial P3-12).
+    """
     try:
         raw = read_google_sheet_as_df(SPREADSHEET_ID, WORKSHEET_NAME)
-    except Exception as e:
-        st.error(
-            "Could not read Google Sheet. Check: secrets/service_account.json and share the sheet with the service-account email."
-        )
-        st.exception(e)
+    except Exception as exc:
+        st.error("Could not read the workouts sheet. Check that the service account has access to the Google Sheet.")
+        with st.expander("Show debug details", expanded=False):
+            st.exception(exc)
         st.stop()
 
     try:
         df = clean(raw, dedupe=True)
-    except Exception as e:
-        st.error("Data cleaning failed (header mismatch is most likely).")
-        st.exception(e)
+    except Exception as exc:
+        st.error("Data cleaning failed. The most likely cause is a header mismatch in the form.")
+        with st.expander("Show debug details", expanded=False):
+            st.exception(exc)
         st.stop()
 
     return df

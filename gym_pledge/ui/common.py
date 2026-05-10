@@ -8,19 +8,20 @@ import pandas as pd
 import seaborn as sns
 import streamlit as st
 
-ALT_TEXT = "#E4E6EB"
-ALT_MUTED = "#9AA0AB"
-ALT_GRID = "rgba(255,255,255,0.08)"
-ALT_PRIMARY = "#60A5FA"
-ALT_FOCUS = "#F59E0B"
-ALT_WORKOUT = "#64748B"
-ALT_CUTOFF = "#34D399"
-ALT_TRACK = "rgba(255,255,255,0.12)"
-ALT_SAGE = "#5FA68D"
-ALT_COPPER = "#B7835A"
-ALT_STEEL = "#6E88A6"
-ALT_SLATE = "#5D6B7C"
-ALT_MOSS = "#7B8C5A"
+from ui.escape import safe_html
+from ui.theme import (
+    ALT_COPPER,
+    ALT_CUTOFF,
+    ALT_FOCUS,
+    ALT_GRID,
+    ALT_MUTED,
+    ALT_PRIMARY,
+    ALT_SAGE,
+    ALT_STEEL,
+    ALT_TEXT,
+    ALT_TRACK,
+    ALT_WORKOUT,
+)
 
 
 def style_plots():
@@ -62,7 +63,7 @@ def render_styled_table(df: pd.DataFrame, max_rows: int | None = None) -> None:
     """
 
     for col in display_df.columns:
-        table_html += f"<th>{col}</th>"
+        table_html += f"<th>{safe_html(col)}</th>"
 
     table_html += """
         </tr></thead><tbody>
@@ -71,7 +72,7 @@ def render_styled_table(df: pd.DataFrame, max_rows: int | None = None) -> None:
     for _, row in display_df.iterrows():
         table_html += "<tr>"
         for val in row:
-            table_html += f"<td>{val}</td>"
+            table_html += f"<td>{safe_html(val)}</td>"
         table_html += "</tr>"
 
     table_html += "</tbody></table>"
@@ -82,11 +83,11 @@ def render_styled_table(df: pd.DataFrame, max_rows: int | None = None) -> None:
 def render_card_start(title: str | None = None, subtitle: str | None = None) -> None:
     """Render opening HTML for a card-like container with optional title/subtitle."""
     if title:
-        st.markdown(f"<div class='card'><h3>{title}</h3>", unsafe_allow_html=True)
+        st.markdown(f"<div class='card'><h3>{safe_html(title)}</h3>", unsafe_allow_html=True)
     else:
         st.markdown("<div class='card'>", unsafe_allow_html=True)
     if subtitle:
-        st.markdown(f"<div class='small-muted'>{subtitle}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='small-muted'>{safe_html(subtitle)}</div>", unsafe_allow_html=True)
 
 
 def render_card_end() -> None:
@@ -1841,7 +1842,7 @@ def render_fastest_winner_podium(
             f"<div style='font-size:13px;color:{accent};font-weight:800;letter-spacing:0.12em;"
             f"text-transform:uppercase;'>Rank #{rank}</div>"
             f"<div style='font-size:22px;font-weight:800;color:#fff;margin:6px 0 4px;"
-            f"letter-spacing:-0.01em;'>{row[name_col]}</div>"
+            f"letter-spacing:-0.01em;'>{safe_html(row[name_col])}</div>"
             f"<div style='font-size:13px;color:#9aa0ab;'>Hit {cutoff_text} on</div>"
             f"<div style='font-size:18px;font-weight:700;color:#fff;margin-top:2px;'>{date_str}</div>"
             f"<div style='margin-top:10px;padding:6px 10px;border-radius:999px;"
@@ -2493,10 +2494,13 @@ def render_lazy_bubble_clusters(
             cx = cx0 + x * scale_to_vb
             cy = cy0 + y * scale_to_vb
             r_vb = r * scale_to_vb
-            first = str(row["FirstName"])
-            last = str(row.get("LastName", "") or "").strip()
-            font_vb = _vb_font(first, r_vb, last)
-            tip = f"{row[name_col]} \u2022 {row[delay_col]:.2f}d \u2022 {int(row[size_col])} logs"
+            first_raw = str(row["FirstName"])
+            last_raw = str(row.get("LastName", "") or "").strip()
+            font_vb = _vb_font(first_raw, r_vb, last_raw)
+            # Escape user-supplied strings before embedding in raw SVG.
+            first = safe_html(first_raw)
+            last = safe_html(last_raw)
+            tip = safe_html(f"{row[name_col]} \u2022 {row[delay_col]:.2f}d \u2022 {int(row[size_col])} logs")
 
             # Build the name text. With a last name we render two stacked
             # tspans, vertically centered around (cx, cy). Without a last

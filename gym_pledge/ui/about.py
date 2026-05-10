@@ -1,11 +1,16 @@
 import matplotlib.pyplot as plt
 import streamlit as st
 
-PLEDGE_AMOUNT = 10
-QUALIFYING_DAYS = 16
-DAILY_CALORIE_TARGET = 250
-VENMO_LINK = "https://venmo.com/u/maddaladivya3212"
-VENMO_HANDLE = "@maddaladivya3212"
+from config.globals import (
+    DAILY_CALORIE_TARGET,
+    QUALIFYING_DAYS,
+    VENMO_HANDLE,
+    VENMO_LINK,
+)
+from config.globals import (
+    PLEDGE_AMOUNT_USD as PLEDGE_AMOUNT,
+)
+from ui.escape import safe_attr, safe_html
 
 
 def _inject_about_styles() -> None:
@@ -354,7 +359,7 @@ def _render_flow() -> None:
           <div class="about-flow-step">
             <div class="about-step-index">1</div>
             <h4>Join monthly pool</h4>
-            <p>Send ${PLEDGE_AMOUNT} to <a href="{VENMO_LINK}" target="_blank">{VENMO_HANDLE}</a>.</p>
+            <p>Send ${PLEDGE_AMOUNT} to <a href="{safe_attr(VENMO_LINK)}" target="_blank" rel="noopener noreferrer">{safe_html(VENMO_HANDLE)}</a>.</p>
           </div>
           <div class="about-flow-step">
             <div class="about-step-index">2</div>
@@ -453,6 +458,7 @@ def _render_payout_simulator() -> None:
 
     with chart_col:
         st.pyplot(fig, transparent=True)
+        plt.close(fig)
         st.markdown(
             f"""
             <div class="about-sim-legend">
