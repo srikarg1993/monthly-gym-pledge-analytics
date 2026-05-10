@@ -59,8 +59,11 @@ no cold-start, multi-region, OAuth gating, more memory/CPU.
       push to `main`/`p2f`, every PR into `main`, and weekly via cron.
 - [x] **Branch protection on `main`**: configured 2026-05-09 by repo
       owner via Rulesets. Requires green `test`, `pre-commit`, and
-      `Analyze (python)` checks + 1 PR approval. Force-push and deletion
-      blocked. Streamlit Cloud still auto-deploys on merge to `main`.
+      `Analyze (python)` checks. Force-push and deletion blocked.
+      Streamlit Cloud still auto-deploys on merge to `main`.
+      **Required approvals = 0** because this is a solo-maintainer
+      repo and you can't approve your own PR. Add an approval
+      requirement only if a real second contributor joins.
 
 ### Tier 2 — nice to have
 
