@@ -1,6 +1,6 @@
 """Data source helpers: reading and cleaning raw sheet data."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import gspread
 import pandas as pd
@@ -81,6 +81,13 @@ def get_users(month_str: str | None = None) -> list[str] | None:
 
 
 def normalize_bool(x: object) -> bool:
+    """Coerce a sheet cell to ``bool``.
+
+    Treats common truthy spellings (``yes``, ``true``, ``1``, ``y``, ``t``)
+    as ``True``; everything else (including ``NaN`` / ``None``) is ``False``.
+    Used to normalize the form's ``Burnt >= 250 calories?`` checkbox before
+    downstream metrics consume it.
+    """
     if pd.isna(x):
         return False
     s = str(x).strip().lower()
@@ -183,7 +190,14 @@ def clean(
     # when both dates are in the past, this is logically impossible — you
     # cannot have done a workout on a day you hadn't reached when you wrote
     # the form. Almost always a date-picker typo.
-    logged_in_future = df.apply(lambda r: r["workout_date"] > r["timestamp_date"], axis=1)
+    #
+    # Tolerance: allow a 1-day grace window so that a tz-aware timestamp
+    # whose UTC date crosses midnight (e.g. user submits at 11:59 PM local,
+    # which is the next calendar day in UTC) doesn't accidentally flag a
+    # legitimate same-day log. Anything further out (1999, 2030, etc.) is
+    # still caught.
+    grace = timedelta(days=1)
+    logged_in_future = df.apply(lambda r: r["workout_date"] > (r["timestamp_date"] + grace), axis=1)
     if logged_in_future.any():
         df = df[~logged_in_future].reset_index(drop=True)
 

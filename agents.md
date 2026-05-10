@@ -218,3 +218,42 @@ the task before improvising:
    `st.error` / `st.stop()` at the UI boundary, or `raise` in pure code.
 8. **Don't add features that weren't asked for.** This includes docstrings,
    comments, and helper abstractions on code you didn't otherwise change.
+
+---
+
+## 10. Mandatory parallel-work + pre-commit gate
+
+These rules apply to **every** AI agent working in this repo. Non-negotiable.
+
+### Parallelize aggressively
+- Prefer **subagents** (e.g. an `Explore` agent) for any task with
+  independent sub-parts. One subagent per audit dimension.
+- When tools are independent (search + fetch + read), call them in a
+  **single** parallel tool block — never one after the other.
+- Linear sequences of `read_file` / `grep_search` calls are a smell;
+  combine or hand off to a subagent.
+
+### Pre-commit gate (run before EVERY commit + push)
+Fan out the following in parallel — usually one subagent per item — and only
+commit after all four pass:
+
+1. **Format / lint sweep** — `ruff format .` + `ruff check .` over the whole
+   repo (not just changed files).
+2. **Code quality audit** — review changed files for missing docstrings on
+   new public functions, missing type hints in `data/*` and `ui/common.py`,
+   non-obvious magic numbers without inline comments, and missing error
+   handling at I/O boundaries.
+3. **Logic-error audit** — read the diff for off-by-ones, wrong-sign bugs,
+   timezone mishandling, missing edge cases (empty df, NaN, future dates,
+   negative numbers, boundary values), and inconsistent state between
+   related fields (e.g. a bool that disagrees with the number it summarizes).
+4. **Doc/skill update audit** — check whether the change warrants:
+   - new/updated `docs/skills/*.md`
+   - new ADR in `docs/adr/` (architectural decisions)
+   - update to `agents.md` / `CLAUDE.md` (convention changes)
+   - update to `README.md` (user-visible behavior changes)
+
+### CI verification after push
+- Use [`scripts/ci-status.ps1`](scripts/ci-status.ps1) (requires `gh` CLI)
+  or `gh run list --branch <b>` to verify CI is green. Don't assume.
+- If `gh` isn't authed yet, fetch the Actions web page directly.

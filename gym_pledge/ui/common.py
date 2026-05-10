@@ -1,4 +1,5 @@
 import math
+from datetime import date
 
 import altair as alt
 import matplotlib as mpl
@@ -2596,8 +2597,8 @@ CALORIE_RACE_PALETTE = [
 def build_cumulative_calories_long(
     df_month: pd.DataFrame,
     *,
-    start_date,
-    end_date,
+    start_date: date,
+    end_date: date,
 ) -> pd.DataFrame:
     """Return long-format dataframe of cumulative calories per (name, date).
 
