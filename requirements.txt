@@ -2,7 +2,7 @@
 # Refresh by running tests on a fresh `uv pip install -r requirements.txt` and
 # updating these pins.
 altair==6.1.0
-google-auth==2.50.0
+google-auth==2.52.0
 google-auth-httplib2==0.4.0
 google-auth-oauthlib==1.3.1
 gspread==6.2.1
