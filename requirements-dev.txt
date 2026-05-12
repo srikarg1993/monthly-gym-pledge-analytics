@@ -2,6 +2,6 @@
 # Install with: uv pip install -r requirements.txt -r requirements-dev.txt
 -r requirements.txt
 pytest==9.0.3
-pytest-cov==7.0.0
+pytest-cov==7.1.0
 ruff==0.14.4
 pre-commit==4.4.0
