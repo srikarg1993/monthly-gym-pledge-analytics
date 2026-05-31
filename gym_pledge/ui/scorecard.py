@@ -665,7 +665,8 @@ def render(*, lb, df_month, cutoff: int) -> None:
 
         st.caption(
             "Left: the entire group's qualifying cadence. Right: the selected participant's. "
-            "Both charts use a shared radial scale so shapes can be compared honestly."
+            "Each chart is scaled to its own data — the group axis spans group totals, "
+            "the individual axis spans a single person's cadence — so shapes stay readable."
         )
 
         if df_month is None or df_month.empty or radar_focus is None:
@@ -678,16 +679,20 @@ def render(*, lb, df_month, cutoff: int) -> None:
             group_counts = _build_qualifying_weekday_counts(df_month)
             candidate_counts = _build_qualifying_weekday_counts(df_month, name=radar_focus)
 
-            # Shared radial scale for honest visual comparison (P2-26). Take
-            # the max of either series so neither chart appears "smaller" by
-            # accident.
-            shared_max = max(max(group_counts, default=0), max(candidate_counts, default=0), 1)
-            shared_r_max = max(int(math.ceil(shared_max * 1.1)), 2)
+            # Group keeps its own scale sized to group counts (typically
+            # 10-40 range). Candidate uses an individual-sized scale (1-5
+            # range) so a single person's cadence is readable instead of
+            # being dwarfed by the group totals.
+            group_max = max(max(group_counts, default=0), 1)
+            group_r_max = max(int(math.ceil(group_max * 1.1)), 2)
+
+            candidate_max = max(max(candidate_counts, default=0), 1)
+            candidate_r_max = max(int(math.ceil(candidate_max * 1.1)), 5)
 
             group_fig = weekday_radar_figure(
                 weekday_order=WEEKDAY_ORDER,
                 group_qualifying=group_counts,
-                r_max=shared_r_max,
+                r_max=group_r_max,
                 show_legend=False,
             )
             candidate_fig = weekday_radar_figure(
@@ -695,7 +700,7 @@ def render(*, lb, df_month, cutoff: int) -> None:
                 group_qualifying=[0] * len(WEEKDAY_ORDER),
                 candidate_qualifying=candidate_counts,
                 candidate_label=radar_focus,
-                r_max=shared_r_max,
+                r_max=candidate_r_max,
                 show_legend=False,
             )
 
