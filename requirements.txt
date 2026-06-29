@@ -1,7 +1,7 @@
 # Runtime dependencies. Pinned to versions verified against the test suite.
 # Refresh by running tests on a fresh `uv pip install -r requirements.txt` and
 # updating these pins.
-altair==6.1.0
+altair==6.2.2
 google-auth==2.50.0
 google-auth-httplib2==0.4.0
 google-auth-oauthlib==1.3.1
